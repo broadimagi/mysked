@@ -275,6 +275,12 @@ function getDashboardRowsPerCard() {
 
 function splitRowsForDashboard(rows) {
     const rowsPerCard = getDashboardRowsPerCard();
+    const isMobileDashboard = window.matchMedia("(max-width: 768px)").matches;
+
+    if (isMobileDashboard) {
+        return rows.length > 0 ? [rows] : [];
+    }
+
     const cardCount = Math.min(3, Math.max(1, Math.ceil(rows.length / rowsPerCard)));
     const groups = [];
 

@@ -9,21 +9,21 @@ html[data-theme="dark"] {
     --text: #f3f4f6; --text-strong: #ffffff; --muted: #9ca3af; --fids-amber: #f59e0b; --time-color: #e5e7eb;
 }
 html[data-theme="light"] {
-    --primary: #2563eb; --primary-dark: #1e40af; --background: #e8edf4;    
-    --surface: #f4f7fb; --surface-accent: #e9eef6; --border: #ced4da; --grid-line: #ced4da;
-    --text: #334155; --text-strong: #172033; --muted: #5f6f83; --fids-amber: #9a5b10; --time-color: #253247;
-    --shadow: 0 12px 34px rgba(27, 39, 58, 0.16);
+    --primary: #2563eb; --primary-dark: #1e40af; --background: #d9e0e8;    
+    --surface: #f5f7fa; --surface-accent: #e8edf3; --border: #c8d0da; --grid-line: #c3ccd8;
+    --text: #334155; --text-strong: #172033; --muted: #64748b; --fids-amber: #8a5a12; --time-color: #243247;
+    --shadow: 0 10px 24px rgba(41, 55, 78, 0.11);
 }
 
 html[data-theme="light"] #header,
 html[data-theme="light"] .footer-bar-container,
 html[data-theme="light"] .single-fids-board,
 html[data-theme="light"] .routes-card-box,
-html[data-theme="light"] .schedule-workspace-board { box-shadow: 0 10px 28px rgba(27, 39, 58, 0.10); }
-html[data-theme="light"] .nav-btn.active { background: #dfe6ef; box-shadow: none; }
+html[data-theme="light"] .schedule-workspace-board { box-shadow: 0 10px 24px rgba(41, 55, 78, 0.09); }
+html[data-theme="light"] .nav-btn.active { background: #ffffff; box-shadow: none; }
 html[data-theme="light"] .theme-btn,
 html[data-theme="light"] #nextDepartureCard,
-html[data-theme="light"] .fids-cycle-indicator-tag { background: #e3eaf3; }
+html[data-theme="light"] .fids-cycle-indicator-tag { background: #eef2f7; }
 
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--app-font); }
 
@@ -45,8 +45,10 @@ body { background: var(--background); color: var(--text); height: 100vh; overflo
 
 .header-right { display: flex; align-items: center; gap: 20px; }
 .theme-btn { background: var(--surface-accent); border: 1px solid var(--border); padding: 8px 14px; border-radius: 6px; cursor: pointer; color: var(--text); font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
-html[data-theme="dark"] .sun-icon { display: none; }
-html[data-theme="light"] .moon-icon { display: none; }
+html[data-theme="dark"] .theme-btn { background: #f3f5f8; border-color: #d8dde6; color: #172033; }
+html[data-theme="light"] .theme-btn { background: #1e293b; border-color: #334155; color: #f8fafc; }
+html[data-theme="dark"] .moon-icon { display: none; }
+html[data-theme="light"] .sun-icon { display: none; }
 
 .clock-display { text-align: right; }
 #currentTime { font-size: 18px; font-weight: 900; color: var(--text-strong); line-height: 1.1; }
