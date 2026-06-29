@@ -244,3 +244,136 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
     .sidebar-panel-wrapper .routes-card-box:first-child { height: 300px; }
     .schedule-workspace-board { height: auto; }
 }
+
+@media (max-width: 768px) and (orientation: portrait) {
+    body { height: 100vh; overflow: hidden; }
+    #app { height: 100vh; overflow: hidden; }
+
+    #header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px 12px;
+        align-items: center;
+        padding: 10px 12px;
+        text-align: left;
+    }
+
+    .company {
+        grid-column: 1 / -1;
+        flex-direction: row;
+        justify-content: flex-start;
+        gap: 10px;
+        min-width: 0;
+        width: 100%;
+    }
+
+    #companyLogo,
+    .logo-fallback {
+        width: 34px;
+        height: 34px;
+        flex: 0 0 34px;
+    }
+
+    .company > div:last-child { min-width: 0; }
+    #companyName {
+        font-size: clamp(15px, 4.4vw, 18px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    #companyTagline { display: none; }
+
+    .view-controls {
+        grid-column: 1;
+        width: 100%;
+        min-width: 0;
+    }
+    .nav-btn {
+        flex: 1;
+        padding: 8px 10px;
+        font-size: 10px;
+    }
+
+    .header-right {
+        grid-column: 2;
+        width: auto;
+        flex-direction: row;
+        gap: 0;
+    }
+    .theme-btn {
+        height: 34px;
+        padding: 8px 10px;
+        white-space: nowrap;
+    }
+    .clock-display { display: none; }
+
+    #announcementBar { height: 28px; }
+    .ticker-title { padding: 0 10px; font-size: 10px; }
+    #ticker { font-size: 12px; }
+
+    .main-viewport-body {
+        flex: 1;
+        min-height: 0;
+        padding: 8px;
+        overflow: hidden;
+    }
+
+    #dashboardView,
+    .single-fids-board { min-height: 0; }
+
+    .single-fids-header {
+        padding: 10px 12px;
+        justify-content: center;
+        text-align: center;
+    }
+    .fids-main-title-info {
+        width: 100%;
+        justify-content: center;
+        min-width: 0;
+    }
+    .route-label-pill,
+    .fids-cycle-indicator-tag { display: none; }
+    .single-fids-header h2 {
+        font-size: clamp(17px, 5vw, 22px);
+        line-height: 1.18;
+        text-align: center;
+        overflow-wrap: anywhere;
+    }
+
+    .dashboard-cards-grid {
+        grid-template-columns: 1fr !important;
+        overflow: hidden;
+    }
+    .dashboard-card-block {
+        border-right: 0;
+        border-bottom: 0;
+    }
+    .dashboard-card-block:not(:first-child) { display: none; }
+
+    .single-fids-table-headings,
+    .single-fids-row {
+        padding-left: 12px;
+        padding-right: 12px;
+        gap: 8px;
+    }
+    .single-fids-row span {
+        font-size: clamp(13px, 4vw, 17px) !important;
+    }
+
+    .footer-bar-container {
+        height: auto;
+        min-height: 0;
+        padding: 8px 12px;
+    }
+    .footer-bar-container > div {
+        flex-direction: column;
+        gap: 3px;
+        font-size: 10px !important;
+        line-height: 1.25;
+    }
+    .footer-bar-container > div > div {
+        flex: none !important;
+        width: 100%;
+        text-align: center !important;
+    }
+}
