@@ -17,9 +17,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: react-vite
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,7 +31,7 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
-          cache-dependency-path: react-vite/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -44,13 +41,13 @@ jobs:
 
       - name: Add GitHub Pages metadata
         run: |
-          cp ../CNAME dist/CNAME
-          cp ../.nojekyll dist/.nojekyll
+          cp CNAME dist/CNAME
+          cp .nojekyll dist/.nojekyll
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: react-vite/dist
+          path: dist
 
   deploy:
     needs: build

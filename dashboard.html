@@ -1,104 +1,15 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mySked</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mySked</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body>
-
-    <div id="loadingScreen">
-        <div class="loader"></div>
-        <h1>mySked</h1>
-        <p>Syncing Live Variable Workspace Pipelines...</p>
-    </div>
-
-    <div id="app" class="hidden">
-        <header id="header">
-            <div class="company">
-                <img id="companyLogo" src="" alt="Logo" class="hidden">
-                <div id="companyLogoFallback" class="logo-fallback hidden">MS</div>
-                <div>
-                    <h1 id="companyName">Loading...</h1>
-                    <p id="companyTagline">Passenger Information System</p>
-                </div>
-            </div>
-            <div class="view-controls">
-                <button id="toggleDashboardBtn" class="nav-btn active">DASHBOARD</button>
-                <button id="toggleSelectionBtn" class="nav-btn">ROUTES</button>
-            </div>
-            <div class="header-right">
-                <button id="themeToggleBtn" class="theme-btn">
-                    <span class="sun-icon">☀️ Light</span><span class="moon-icon">🌙 Dark</span>
-                </button>
-                <div class="clock-display">
-                    <div id="currentTime">00:00:00 AM</div>
-                    <div id="currentDate">Loading Date...</div>
-                </div>
-            </div>
-        </header>
-
-        <div id="announcementBar">
-            <div class="ticker-title">Advisory</div>
-            <div class="ticker-wrap">
-                <div id="ticker">Loading global broadcast feeds...</div>
-            </div>
-        </div>
-
-        <main class="main-viewport-body">
-            <div id="dashboardView" class="view-panel"></div>
-
-            <div id="selectionView" class="view-panel hidden">
-                <div class="selection-grid-layout">
-                    <div class="sidebar-panel-wrapper">
-                        <div class="routes-card-box">
-                            <div class="section-head-title">Active Routes</div>
-                            <div id="routeContainer" class="scroll-chips-track"></div>
-                        </div>
-                        <div class="routes-card-box">
-                            <div class="section-head-title">Non Active Routes</div>
-                            <div id="inactiveRoutes" class="scroll-chips-track"></div>
-                        </div>
-                    </div>
-                    <div class="schedule-workspace-board">
-                        <div class="workspace-header-hero">
-                            <div class="workspace-meta-details">
-                                <h3>TRACKED OPERATIONS LINE</h3>
-                                <h2 id="selectedRoute">Select a route segment...</h2>
-                            </div>
-                            <div id="nextDepartureCard">
-                                <div class="label">NEXT DEPARTURE</div>
-                                <div id="nextDepartureTime">--:--</div>
-                                <div id="nextDepartureStatus">-</div>
-                            </div>
-                        </div>
-                        <div class="timeline-title">Timetable departures</div>
-                        <div id="scheduleWorkspaceScroll" class="scrollable-content">
-                            <div id="scheduleContainer" class="schedule-list"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
-
-        <!-- FIXED: Footer container properly configured -->
-        <footer class="footer-bar-container"></footer>
-    </div>
-
-    <div id="modalOverlay" class="hidden">
-        <div id="modal">
-            <div class="modalHeader">
-                <h2>Trip Dispatch Metrics</h2>
-                <button id="closeModal">✕</button>
-            </div>
-            <div id="modalContent" style="padding: 25px; color: var(--text);"></div>
-        </div>
-    </div>
-
-    <script src="app.js"></script>
+  <div id="react-root"></div>
+  <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
