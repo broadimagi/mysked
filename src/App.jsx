@@ -1,36 +1,128 @@
 import React, { useEffect, useState } from 'react';
 
 const API_URL = "https://script.google.com/macros/s/AKfycby778WwSXHTuZcVC2iT4U3wkrn5pYOpXOuCVZQQ3Oo47cuLqbhyFpEm_6RRrgdcF9s/exec";
-const HEADER_REFRESH_MS = 5 * 60 * 1000;
 const emptyData = { globalSettings: {}, company: {}, routes: [], schedules: [], advisories: [] };
 
 function getSafeValue(obj, targetKey, fallback = "") {
     if (!obj) return fallback;
-    const cleanTarget = String(targetKey).toLowerCase().replace(/\s+/g, "");
-    const matchedKey = Object.keys(obj).find(k => k.toLowerCase().replace(/\s+/g, "") === cleanTarget);
+    const targets = getColumnAliases(targetKey).map(normalizeColumnKey);
+    const matchedKey = Object.keys(obj).find(k => targets.includes(normalizeColumnKey(k)));
     return matchedKey && obj[matchedKey] !== undefined ? obj[matchedKey] : fallback;
 }
 
-function normalizeColumnKey(value) {
-    return String(value || "").toLowerCase().replace(/\s+/g, "");
+function getColumnAliases(targetKey) {
+    const cleanTarget = normalizeColumnKey(targetKey);
+    const aliases = {
+        route: ["route", "routeName", "name"],
+        status: ["status", "routeStatus", "scheduleStatus"],
+        route_status: ["routeStatus", "scheduleStatus", "status"],
+        departuretime: ["departureTime", "Departure Time", "time"],
+        scheduletype: ["scheduleType", "Schedule_Type"],
+        schedulecustomtext: ["scheduleCustomText", "Schedule_Custom_Text"],
+        companyname: ["companyName", "operatorName", "company"],
+        logourl: ["logoURL", "logoUrl"],
+        thememode: ["themeMode"],
+        primarycolor: ["primaryColor"],
+        refreshseconds: ["refreshSeconds"],
+        cycleseconds: ["cycleSeconds"],
+        footertext: ["footerText"],
+        displaycolumns: ["displayColumns"]
+    };
+    return aliases[cleanTarget] ? [targetKey, ...aliases[cleanTarget]] : [targetKey];
 }
 
-function isHiddenColumn(columnName, company) {
-    return (company.hiddenColumns || []).includes(normalizeColumnKey(columnName));
+function getSettingValue(settings, targetKey, fallback = "") {
+    if (!settings) return fallback;
+    const cleanTarget = normalizeColumnKey(targetKey);
+    const matchedKey = Object.keys(settings).find(key => normalizeColumnKey(key) === cleanTarget);
+    const value = matchedKey ? settings[matchedKey] : undefined;
+    return value === undefined || value === null || value === "" ? fallback : value;
+}
+
+function getPlatformName(globalSettings = {}) {
+    return getSettingValue(globalSettings, "PlatformName", "mySked");
+}
+
+function getSupportEmail(globalSettings = {}) {
+    return getSettingValue(globalSettings, "ContactSupportEmail", "");
+}
+
+function normalizeColumnKey(value) {
+    return String(value || "").toLowerCase().replace(/[\s_-]+/g, "");
+}
+
+function normalizeRouteId(value) {
+    return String(value || "").trim().toLowerCase();
+}
+
+function normalizeColumnList(value) {
+    if (Array.isArray(value)) return value.map(item => String(item || "").trim()).filter(Boolean);
+    if (typeof value === "string") return value.split(",").map(item => item.trim()).filter(Boolean);
+    return [];
+}
+
+function getNumberSetting(...values) {
+    const matched = values.find(value => {
+        const number = Number(value);
+        return Number.isFinite(number) && number > 0;
+    });
+    return matched === undefined ? null : Number(matched);
+}
+
+function resolveDisplayColumn(column, availableColumns) {
+    const cleanColumn = normalizeColumnKey(column);
+    const exactMatch = availableColumns.find(key => normalizeColumnKey(key) === cleanColumn);
+    if (exactMatch) return exactMatch;
+    if (cleanColumn === "status") {
+        return availableColumns.find(key => normalizeColumnKey(key).endsWith("status")) || column;
+    }
+    return column;
+}
+
+function getConfiguredLabel(label, company = {}) {
+    const settings = company.labelSettings || company.labels || {};
+    if (Array.isArray(settings)) {
+        const match = settings.find(item => normalizeColumnKey(item.key) === normalizeColumnKey(label));
+        return match && match.label ? match.label : "";
+    }
+    if (settings && typeof settings === "object") {
+        const matchedKey = Object.keys(settings).find(key => normalizeColumnKey(key) === normalizeColumnKey(label));
+        return matchedKey ? settings[matchedKey] : "";
+    }
+    return "";
+}
+
+function formatColumnLabel(label, company = {}) {
+    const configuredLabel = getConfiguredLabel(label, company);
+    if (configuredLabel) return configuredLabel;
+    return String(label || "")
+        .replace(/[_-]+/g, " ")
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\b\w/g, char => char.toUpperCase());
 }
 
 function getScheduleColumns(rows, company) {
     const systemColumns = ["routeid", "routecode"];
-    const preferredOrder = ["Departure Time", "Status", "Remarks"];
+    const preferredOrder = ["departureTime", "scheduleStatus", "routeStatus", "Status", "remarks"];
+    const displayColumns = normalizeColumnList(company.displayColumns);
+    const hasDisplayColumns = displayColumns.length > 0;
     const seen = [];
 
     rows.forEach(row => {
         Object.keys(row).forEach(key => {
             const cleanKey = normalizeColumnKey(key);
-            if (!cleanKey || systemColumns.includes(cleanKey) || isHiddenColumn(key, company)) return;
+            if (!cleanKey || systemColumns.includes(cleanKey)) return;
             if (!seen.some(existing => normalizeColumnKey(existing) === cleanKey)) seen.push(key);
         });
     });
+
+    if (hasDisplayColumns) {
+        return displayColumns
+            .filter(column => !systemColumns.includes(normalizeColumnKey(column)))
+            .map(column => resolveDisplayColumn(column, seen));
+    }
 
     const nonEmptyColumns = seen.filter(key => rows.some(row => String(getSafeValue(row, key, "")).trim() !== ""));
     const availableColumns = nonEmptyColumns.length > 0 ? nonEmptyColumns : seen;
@@ -44,7 +136,7 @@ function getScheduleColumns(rows, company) {
         if (!orderedColumns.some(existing => normalizeColumnKey(existing) === normalizeColumnKey(key))) orderedColumns.push(key);
     });
 
-    return orderedColumns.length > 0 ? orderedColumns : preferredOrder.filter(key => !isHiddenColumn(key, company));
+    return orderedColumns.length > 0 ? orderedColumns : preferredOrder;
 }
 
 function getScheduleGridTemplate(headersList, compact = false) {
@@ -52,12 +144,12 @@ function getScheduleGridTemplate(headersList, compact = false) {
         const clean = normalizeColumnKey(header);
         if (compact) {
             if (clean.includes("time")) return "minmax(96px, 0.9fr)";
-            if (clean === "status") return "minmax(88px, 0.8fr)";
+            if (clean.endsWith("status")) return "minmax(88px, 0.8fr)";
             if (["remarks", "remark", "destination", "terminal", "notes", "note"].some(token => clean.includes(token))) return "minmax(120px, 1.2fr)";
             return "minmax(96px, 1fr)";
         }
         if (clean.includes("time")) return "minmax(130px, 0.8fr)";
-        if (clean === "status") return "minmax(110px, 0.7fr)";
+        if (clean.endsWith("status")) return "minmax(110px, 0.7fr)";
         if (["remarks", "remark", "destination", "terminal", "notes", "note"].some(token => clean.includes(token))) return "minmax(180px, 1.4fr)";
         return "minmax(140px, 1fr)";
     }).join(" ");
@@ -103,7 +195,7 @@ function statusColorMapper(statusValue, company = {}) {
 }
 
 function getChronologicalNextDeparture(targetSchedules) {
-    const validSchedules = targetSchedules.filter(s => !["cancelled", "unavailable", "suspended"].includes(String(getSafeValue(s, "status")).trim().toLowerCase()));
+    const validSchedules = targetSchedules.filter(s => !["cancelled", "unavailable", "suspended"].includes(String(getSafeValue(s, "route_status") || getSafeValue(s, "status")).trim().toLowerCase()));
     if (validSchedules.length === 0) return null;
 
     const parseTimeToMinutes = (timeValue) => {
@@ -177,6 +269,9 @@ function HomePage() {
     const [operators, setOperators] = useState([]);
     const [loading, setLoading] = useState(true);
     const [maintenance, setMaintenance] = useState(null);
+    const [globalSettings, setGlobalSettings] = useState({});
+    const platformName = getPlatformName(globalSettings);
+    const supportEmail = getSupportEmail(globalSettings);
 
     useEffect(() => {
         document.body.className = "react-home-mode";
@@ -190,8 +285,12 @@ function HomePage() {
                 const response = await fetch(`${API_URL}?mode=operators&t=${Date.now()}`);
                 const data = await response.json();
                 if (!alive) return;
+                setGlobalSettings(data.globalSettings || {});
                 if (data.maintenance) {
-                    setMaintenance({ message: data.message || "We're performing scheduled maintenance.", time: new Date().toLocaleTimeString("en-PH") });
+                    setMaintenance({
+                        message: data.message || getSettingValue(data.globalSettings, "MaintenanceMessage", "We're performing scheduled maintenance."),
+                        time: new Date().toLocaleTimeString("en-PH")
+                    });
                     setLoading(false);
                     return;
                 }
@@ -217,9 +316,9 @@ function HomePage() {
         <div className="react-home">
             <div className="header">
                 <div className="brand-lockup">
-                    <div className="brand-mark">MS</div>
+                    <div className="brand-mark">{getCompanyInitials(platformName)}</div>
                     <div>
-                        <div className="header-title">mySked Portal</div>
+                        <div className="header-title">{platformName} Portal</div>
                         <div className="header-kicker">Passenger information workspace</div>
                     </div>
                 </div>
@@ -266,23 +365,35 @@ function HomePage() {
                     <div className="maintenance-content">
                         <h1 className="maintenance-title">We'll be right back</h1>
                         <p className="maintenance-message">{maintenance.message}</p>
+                        {supportEmail && <a className="support-link" href={`mailto:${supportEmail}`}>{supportEmail}</a>}
                         <div style={{ color: "#6b7280", fontSize: 13 }}>Checking status <span className="loading"></span><span className="loading"></span><span className="loading"></span></div>
                         <div className="maintenance-time">{maintenance.time}</div>
                     </div>
                 </div>
             )}
 
-            <footer><a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer" className="footer-link">mySked Powered by Broadimagi</a></footer>
+            <footer><a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer" className="footer-link">{platformName} Powered by Broadimagi</a></footer>
         </div>
     );
 }
 
-function LoadingScreen({ error }) {
+function LoadingScreen({ error, platformName = "mySked", supportEmail = "" }) {
     return (
         <div id="loadingScreen">
-            {error ? <><h1>mySked</h1><p style={{ maxWidth: 420, textAlign: "center", lineHeight: 1.6, textTransform: "none", letterSpacing: 0, color: "#9ca3af" }}>{error}</p></> : <><div className="loader"></div><h1>mySked</h1><p>Syncing Live Variable Workspace Pipelines...</p></>}
+            {error ? <><h1>{platformName}</h1><p style={{ maxWidth: 420, textAlign: "center", lineHeight: 1.6, textTransform: "none", letterSpacing: 0, color: "#9ca3af" }}>{error}</p>{supportEmail && <a className="support-link" href={`mailto:${supportEmail}`}>{supportEmail}</a>}</> : <><div className="loader"></div><h1>{platformName}</h1><p>Syncing Live Variable Workspace Pipelines...</p></>}
         </div>
     );
+}
+
+function MissingOperatorNotice() {
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            window.location.href = "/";
+        }, 3000);
+        return () => clearTimeout(timer);
+    }, []);
+
+    return <LoadingScreen error="No operator was selected. Returning to the homepage in 3 seconds." />;
 }
 
 function CompanyLogo({ company }) {
@@ -344,7 +455,7 @@ function ScheduleCell({ header, value, compact, company }) {
     const clean = normalizeColumnKey(header);
     const fontSize = compact ? "14px" : "15px";
     if (clean.includes("time")) return <span className="time-col" style={{ fontSize, fontWeight: 700 }}>{formatTimeToHHMM(value)}</span>;
-    if (clean === "status") return <span><strong className={statusColorMapper(value, company)} style={{ fontSize: 14, fontWeight: 700 }}>{String(value || "-").toUpperCase()}</strong></span>;
+    if (clean.endsWith("status")) return <span><strong className={statusColorMapper(value, company)} style={{ fontSize: 14, fontWeight: 700 }}>{String(value || "-").toUpperCase()}</strong></span>;
     return <span className="text-col" style={{ fontSize: 14, fontWeight: 600 }}>{value || "-"}</span>;
 }
 
@@ -362,20 +473,21 @@ function DashboardRoute({ data, routeIndex }) {
     const activeRoutes = data.routes.filter(r => String(getSafeValue(r, "status")).toLowerCase() === "active");
     if (activeRoutes.length === 0) return <div className="fids-empty-msg">No Active Dispatched Routes Found.</div>;
     const currentRoute = activeRoutes[routeIndex % activeRoutes.length];
-    const currentRouteID = String(getSafeValue(currentRoute, "routeid") || getSafeValue(currentRoute, "routecode")).toLowerCase();
+    const currentRouteID = normalizeRouteId(getSafeValue(currentRoute, "routeid") || getSafeValue(currentRoute, "routecode"));
     const scheduleType = String(getSafeValue(currentRoute, "scheduletype")).toLowerCase();
     const customText = getSafeValue(currentRoute, "schedulecustomtext");
     const isTextMode = scheduleType === "text" || customText !== "";
-    const targetSchedules = data.schedules.filter(s => String(getSafeValue(s, "routeid")).toLowerCase() === currentRouteID && currentRouteID !== "");
+    const targetSchedules = data.schedules.filter(s => normalizeRouteId(getSafeValue(s, "routeid")) === currentRouteID && currentRouteID !== "");
     const headersList = getScheduleColumns(targetSchedules, data.company);
     const gridTemplateColumns = getScheduleGridTemplate(headersList, true);
     const rowGroups = splitRowsForDashboard(targetSchedules);
+    const cycleSeconds = getNumberSetting(data.company.cycleSeconds) || 15;
 
     return (
         <section className="single-fids-board">
             <div className="single-fids-header">
                 <div className="fids-main-title-info"><span className="route-label-pill" style={{ backgroundColor: "var(--primary)" }}>LIVE DASHBOARD</span><h2>{getSafeValue(currentRoute, "route")}</h2></div>
-                <div className="fids-cycle-indicator-tag">Cycling every {data.company.cycleSeconds}s</div>
+                <div className="fids-cycle-indicator-tag">Cycling every {cycleSeconds}s</div>
             </div>
             {isTextMode ? (
                 <div className="fids-text-schedule-panel"><div className="fids-text-schedule-message">{customText || "Interval Operations Active."}</div></div>
@@ -387,7 +499,7 @@ function DashboardRoute({ data, routeIndex }) {
                         const blankRows = Math.max(0, getDashboardRowsPerCard() - group.length);
                         return (
                             <div className="column-block dashboard-card-block" key={groupIndex}>
-                                <div className="single-fids-table-headings" style={{ gridTemplateColumns }}>{headersList.map(h => <span key={h}>{h}</span>)}</div>
+                                <div className="single-fids-table-headings" style={{ gridTemplateColumns }}>{headersList.map(h => <span key={h}>{formatColumnLabel(h, data.company)}</span>)}</div>
                                 <div className="fids-adaptive-flow-container">
                                     {group.map((row, rowIndex) => <div key={rowIndex} className="single-fids-row" style={{ gridTemplateColumns }}>{headersList.map(h => <ScheduleCell key={h} header={h} value={getSafeValue(row, h, "-")} compact company={data.company} />)}</div>)}
                                     {Array.from({ length: blankRows }, (_, i) => <div key={`blank-${i}`} className="single-fids-row single-fids-row-empty" style={{ gridTemplateColumns }} aria-hidden="true">{headersList.map(h => <span key={h}>&nbsp;</span>)}</div>)}
@@ -404,19 +516,19 @@ function DashboardRoute({ data, routeIndex }) {
 function RoutesView({ data, selectedRoute, setSelectedRoute }) {
     const activeList = data.routes.filter(r => String(getSafeValue(r, "status")).toLowerCase() === "active");
     const inactiveList = data.routes.filter(r => String(getSafeValue(r, "status")).toLowerCase() !== "active");
-    const selected = data.routes.find(r => String(getSafeValue(r, "routeid") || getSafeValue(r, "routecode")).toLowerCase() === String(selectedRoute).toLowerCase()) || activeList[0];
+    const selected = data.routes.find(r => normalizeRouteId(getSafeValue(r, "routeid") || getSafeValue(r, "routecode")) === normalizeRouteId(selectedRoute)) || activeList[0];
     const matchedId = selected ? getSafeValue(selected, "routeid") || getSafeValue(selected, "routecode") : "";
     const routeStatus = String(getSafeValue(selected, "status") || "inactive").trim();
     const isRouteActive = routeStatus.toLowerCase() === "active";
     const scheduleType = String(getSafeValue(selected, "scheduletype")).toLowerCase();
     const customText = getSafeValue(selected, "schedulecustomtext");
     const isTextMode = scheduleType === "text" || customText !== "";
-    const targetSchedules = data.schedules.filter(s => String(getSafeValue(s, "routeid")).toLowerCase() === String(matchedId).toLowerCase());
+    const targetSchedules = data.schedules.filter(s => normalizeRouteId(getSafeValue(s, "routeid")) === normalizeRouteId(matchedId));
     const headersList = getScheduleColumns(targetSchedules, data.company);
     const colWidths = getScheduleGridTemplate(headersList);
     const nextDepartureRow = isRouteActive ? getChronologicalNextDeparture(targetSchedules) : null;
     const nextTime = !isRouteActive ? "NOT ACTIVE" : isTextMode ? "INTERVAL" : nextDepartureRow ? formatTimeToHHMM(getSafeValue(nextDepartureRow, "departuretime") || getSafeValue(nextDepartureRow, "time")) : targetSchedules.length ? "SUSPENDED" : "--:--";
-    const nextStatus = !isRouteActive ? routeStatus.toUpperCase() : isTextMode ? "OPERATING" : nextDepartureRow ? String(getSafeValue(nextDepartureRow, "status") || "-").toUpperCase() : targetSchedules.length ? "NO RUNS" : "-";
+    const nextStatus = !isRouteActive ? routeStatus.toUpperCase() : isTextMode ? "OPERATING" : nextDepartureRow ? String(getSafeValue(nextDepartureRow, "route_status") || getSafeValue(nextDepartureRow, "status") || "-").toUpperCase() : targetSchedules.length ? "NO RUNS" : "-";
 
     function chooseRoute(route) {
         setSelectedRoute(getSafeValue(route, "routeid") || getSafeValue(route, "routecode"));
@@ -429,14 +541,14 @@ function RoutesView({ data, selectedRoute, setSelectedRoute }) {
                     <div className="section-head-title">Active Routes</div>
                     <div className="scroll-chips-track">{activeList.map(route => {
                         const id = getSafeValue(route, "routeid") || getSafeValue(route, "routecode");
-                        return <button key={id} className={`route-chip ${String(selectedRoute).toLowerCase() === String(id).toLowerCase() ? "active" : ""}`} onClick={() => chooseRoute(route)}>{getSafeValue(route, "route")}</button>;
+                        return <button key={id} className={`route-chip ${normalizeRouteId(selectedRoute) === normalizeRouteId(id) ? "active" : ""}`} onClick={() => chooseRoute(route)}>{getSafeValue(route, "route")}</button>;
                     })}</div>
                 </div>
                 <div className="routes-card-box">
                     <div className="section-head-title">Non Active Routes</div>
                     <div className="scroll-chips-track">{inactiveList.length === 0 ? <div className="inactive-route-chip inactive-route-chip-static">All services operational</div> : inactiveList.map(route => {
                         const id = getSafeValue(route, "routeid") || getSafeValue(route, "routecode");
-                        return <button key={id} className={`inactive-route-chip ${String(selectedRoute).toLowerCase() === String(id).toLowerCase() ? "active" : ""}`} onClick={() => chooseRoute(route)}><span>{getSafeValue(route, "route") || getSafeValue(route, "name")}</span><strong>{getSafeValue(route, "status") || "Inactive"}</strong></button>;
+                        return <button key={id} className={`inactive-route-chip ${normalizeRouteId(selectedRoute) === normalizeRouteId(id) ? "active" : ""}`} onClick={() => chooseRoute(route)}><span>{getSafeValue(route, "route") || getSafeValue(route, "name")}</span><strong>{getSafeValue(route, "status") || "Inactive"}</strong></button>;
                     })}</div>
                 </div>
             </div>
@@ -447,7 +559,7 @@ function RoutesView({ data, selectedRoute, setSelectedRoute }) {
                     <div id="nextDepartureCard"><div className="label">NEXT DEPARTURE</div><div id="nextDepartureTime">{nextTime || "--:--"}</div><div id="nextDepartureStatus" className={isRouteActive ? statusColorMapper(nextStatus, data.company) : "cancelled"}>{nextStatus}</div></div>
                 </div>
 
-                {!isTextMode && targetSchedules.length > 0 && <div className="timeline-title" style={{ gridTemplateColumns: colWidths }}>{headersList.map(h => <span key={h}>{h}</span>)}</div>}
+                {!isTextMode && targetSchedules.length > 0 && <div className="timeline-title" style={{ gridTemplateColumns: colWidths }}>{headersList.map(h => <span key={h}>{formatColumnLabel(h, data.company)}</span>)}</div>}
                 {isTextMode ? (
                     <div className="scrollable-content"><div style={{ padding: 40, textAlign: "center", display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}><div style={{ fontSize: 16, fontWeight: 800, color: "var(--time-color)", background: "var(--surface-accent)", padding: "25px 35px", borderRadius: 10, border: "1px solid var(--border)", width: "100%", maxWidth: 550, lineHeight: 1.6 }}>{customText || "Interval Operations Active For This Path Line."}</div></div></div>
                 ) : (
@@ -476,6 +588,11 @@ function DashboardPage({ operatorCode }) {
     const [theme, setTheme] = useState("dark");
     const [themeManuallySet, setThemeManuallySet] = useState(false);
     const [lastSyncedAt, setLastSyncedAt] = useState(null);
+    const globalSettings = data.globalSettings || {};
+    const platformName = getPlatformName(globalSettings);
+    const supportEmail = getSupportEmail(globalSettings);
+    const refreshSeconds = getNumberSetting(data.company.refreshSeconds) || 60;
+    const cycleSeconds = getNumberSetting(data.company.cycleSeconds) || 15;
 
     useEffect(() => { document.body.className = viewMode === "selection" ? "selection-mode" : ""; }, [viewMode]);
     useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, [theme]);
@@ -489,12 +606,19 @@ function DashboardPage({ operatorCode }) {
                 const next = await response.json();
                 if (!alive) return;
                 if (next.maintenance) {
-                    setError(next.message || "System maintenance is in progress.");
+                    setData(current => ({ ...current, globalSettings: next.globalSettings || current.globalSettings || {} }));
+                    setError(next.message || getSettingValue(next.globalSettings, "MaintenanceMessage", "System maintenance is in progress."));
                     setLoading(false);
                     return;
                 }
                 if (!next.success) {
-                    if (isFirstLoad) setError(next.error || "Unable to load schedule data.");
+                    setData(current => ({ ...current, globalSettings: next.globalSettings || current.globalSettings || {} }));
+                    if (next.code === "NO_OPERATOR") {
+                        setError("No operator was selected. Returning to the homepage in 3 seconds.");
+                        setTimeout(() => { window.location.href = "/"; }, 3000);
+                    } else if (isFirstLoad) {
+                        setError(next.error || "Unable to load schedule data.");
+                    }
                     setLoading(false);
                     return;
                 }
@@ -511,26 +635,25 @@ function DashboardPage({ operatorCode }) {
             }
         }
         loadData(true);
-        const master = setInterval(() => loadData(false), (data.company.refreshSeconds || 60) * 1000);
-        const header = setInterval(() => loadData(false), HEADER_REFRESH_MS);
-        return () => { alive = false; clearInterval(master); clearInterval(header); };
-    }, [operatorCode]);
+        const master = setInterval(() => loadData(false), refreshSeconds * 1000);
+        return () => { alive = false; clearInterval(master); };
+    }, [operatorCode, refreshSeconds]);
 
     useEffect(() => {
-        const cycleMs = (data.company.cycleSeconds || 15) * 1000;
+        const cycleMs = cycleSeconds * 1000;
         const timer = setInterval(() => {
             const activeRoutes = data.routes.filter(r => String(getSafeValue(r, "status")).toLowerCase() === "active");
             if (activeRoutes.length > 0 && viewMode === "dashboard") setRouteIndex(index => (index + 1) % activeRoutes.length);
         }, cycleMs);
         return () => clearInterval(timer);
-    }, [data.routes, data.company.cycleSeconds, viewMode]);
+    }, [data.routes, cycleSeconds, viewMode]);
 
     function toggleTheme() {
         setThemeManuallySet(true);
         setTheme(current => current === "light" ? "dark" : "light");
     }
 
-    if (loading || error) return <LoadingScreen error={error} />;
+    if (loading || error) return <LoadingScreen error={error} platformName={platformName} supportEmail={supportEmail} />;
 
     return (
         <div id="app">
@@ -548,6 +671,7 @@ function DashboardPage({ operatorCode }) {
 function App() {
     const params = new URLSearchParams(window.location.search);
     const operatorCode = params.get("operator");
+    if (params.has("operator") && !operatorCode) return <MissingOperatorNotice />;
     return operatorCode ? <DashboardPage operatorCode={operatorCode} /> : <HomePage />;
 }
 

@@ -6,15 +6,51 @@ let currentDashboardRouteIndex = 0;
 let dashboardCycleInterval = null;
 let masterRefreshInterval = null;
 let headerRefreshInterval = null;
-const HEADER_REFRESH_MS = 5 * 60 * 1000;
 let themeManuallySet = false;
 let lastSyncedAt = null;
 
 function getSafeValue(obj, targetKey, fallback = "") {
     if (!obj) return fallback;
-    const cleanTarget = targetKey.toLowerCase().replace(/\s+/g, "");
-    const matchedKey = Object.keys(obj).find(k => k.toLowerCase().replace(/\s+/g, "") === cleanTarget);
+    const targets = getColumnAliases(targetKey).map(normalizeColumnKey);
+    const matchedKey = Object.keys(obj).find(k => targets.includes(normalizeColumnKey(k)));
     return (matchedKey && obj[matchedKey] !== undefined) ? obj[matchedKey] : fallback;
+}
+
+function getColumnAliases(targetKey) {
+    const cleanTarget = normalizeColumnKey(targetKey);
+    const aliases = {
+        route: ["route", "routeName", "name"],
+        status: ["status", "routeStatus", "scheduleStatus"],
+        route_status: ["routeStatus", "scheduleStatus", "status"],
+        departuretime: ["departureTime", "Departure Time", "time"],
+        scheduletype: ["scheduleType", "Schedule_Type"],
+        schedulecustomtext: ["scheduleCustomText", "Schedule_Custom_Text"],
+        companyname: ["companyName", "operatorName", "company"],
+        logourl: ["logoURL", "logoUrl"],
+        thememode: ["themeMode"],
+        primarycolor: ["primaryColor"],
+        refreshseconds: ["refreshSeconds"],
+        cycleseconds: ["cycleSeconds"],
+        footertext: ["footerText"],
+        displaycolumns: ["displayColumns"]
+    };
+    return aliases[cleanTarget] ? [targetKey, ...aliases[cleanTarget]] : [targetKey];
+}
+
+function getSettingValue(settings, targetKey, fallback = "") {
+    if (!settings) return fallback;
+    const cleanTarget = normalizeColumnKey(targetKey);
+    const matchedKey = Object.keys(settings).find(key => normalizeColumnKey(key) === cleanTarget);
+    const value = matchedKey ? settings[matchedKey] : undefined;
+    return value === undefined || value === null || value === "" ? fallback : value;
+}
+
+function getPlatformName(globalSettings = {}) {
+    return getSettingValue(globalSettings, "PlatformName", "mySked");
+}
+
+function getSupportEmail(globalSettings = {}) {
+    return getSettingValue(globalSettings, "ContactSupportEmail", "");
 }
 
 window.onload = () => {
@@ -22,7 +58,8 @@ window.onload = () => {
     let operatorCode = urlParams.get('operator'); 
 
     if (!operatorCode) {
-        window.location.href = "index.html";
+        showStartupError("No operator was selected. Returning to the homepage in 3 seconds.");
+        setTimeout(() => { window.location.href = "index.html"; }, 3000);
         return;
     }
 
@@ -37,13 +74,14 @@ window.onload = () => {
 
 async function initApplication(operatorCode) {
     await loadDashboardData(operatorCode, true, "all");
-    const refreshMs = (appData.company.refreshSeconds || 60) * 1000;
+    const refreshSeconds = getNumberSetting(appData.company.refreshSeconds) || 60;
+    const refreshMs = refreshSeconds * 1000;
 
     clearInterval(masterRefreshInterval);
-    masterRefreshInterval = setInterval(() => loadDashboardData(operatorCode, false, "cards"), refreshMs);
+    masterRefreshInterval = setInterval(() => loadDashboardData(operatorCode, false, "all"), refreshMs);
 
     clearInterval(headerRefreshInterval);
-    headerRefreshInterval = setInterval(() => loadDashboardData(operatorCode, false, "header"), HEADER_REFRESH_MS);
+    headerRefreshInterval = null;
 }
 
 async function loadDashboardData(operatorCode, isFirstLoad, refreshScope = "all") {
@@ -52,17 +90,27 @@ async function loadDashboardData(operatorCode, isFirstLoad, refreshScope = "all"
         const data = await response.json();
         
         if (data.maintenance) {
+            appData = { ...appData, globalSettings: data.globalSettings || {} };
+            const platformName = getPlatformName(appData.globalSettings);
+            const supportEmail = getSupportEmail(appData.globalSettings);
             document.body.innerHTML = `
                 <div style="height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; background:#07090e; color:#fff; font-family:sans-serif; text-align:center; padding:20px;">
-                    <h1 style="font-size:40px; margin-bottom:10px; color:var(--fids-amber);">We will be right back</h1>
-                    <p style="color:#9ca3af; font-size:16px;">${data.message || "System maintenance is in progress."}</p>
+                    <h1 style="font-size:40px; margin-bottom:10px; color:var(--fids-amber);">${escapeHTML(platformName)}</h1>
+                    <p style="color:#9ca3af; font-size:16px;">${escapeHTML(data.message || getSettingValue(appData.globalSettings, "MaintenanceMessage", "System maintenance is in progress."))}</p>
+                    ${supportEmail ? `<a href="mailto:${escapeHTML(supportEmail)}" style="color:#7dd3fc; font-size:13px; font-weight:800; text-decoration:none;">${escapeHTML(supportEmail)}</a>` : ""}
                 </div>
             `;
             return;
         }
 
         if (!data.success) {
-            if (isFirstLoad) showStartupError(data.error || "Unable to load schedule data.");
+            appData = { ...appData, globalSettings: data.globalSettings || appData.globalSettings || {} };
+            if (data.code === "NO_OPERATOR") {
+                showStartupError("No operator was selected. Returning to the homepage in 3 seconds.");
+                setTimeout(() => { window.location.href = "index.html"; }, 3000);
+            } else if (isFirstLoad) {
+                showStartupError(data.error || "Unable to load schedule data.");
+            }
             return;
         }
         appData = data;
@@ -98,11 +146,14 @@ async function loadDashboardData(operatorCode, isFirstLoad, refreshScope = "all"
 function showStartupError(message) {
     const loadingScreen = document.getElementById("loadingScreen");
     if (!loadingScreen) return;
+    const platformName = getPlatformName(appData.globalSettings);
+    const supportEmail = getSupportEmail(appData.globalSettings);
     loadingScreen.innerHTML = `
-        <h1>mySked</h1>
+        <h1>${escapeHTML(platformName)}</h1>
         <p style="max-width:420px; text-align:center; line-height:1.6; text-transform:none; letter-spacing:0; color:#9ca3af;">
-            ${message}
+            ${escapeHTML(message)}
         </p>
+        ${supportEmail ? `<a href="mailto:${escapeHTML(supportEmail)}" style="color:#7dd3fc; font-size:13px; font-weight:800; text-decoration:none;">${escapeHTML(supportEmail)}</a>` : ""}
     `;
 }
 
@@ -152,7 +203,7 @@ function switchViewMode(mode) {
 
 function startDashboardCycle() {
     clearInterval(dashboardCycleInterval);
-    const cycleMs = (appData.company.cycleSeconds || 15) * 1000; 
+    const cycleMs = (getNumberSetting(appData.company.cycleSeconds) || 15) * 1000; 
     dashboardCycleInterval = setInterval(() => {
         const activeRoutes = appData.routes.filter(r => String(getSafeValue(r, "status")).toLowerCase() === "active");
         if (activeRoutes.length > 0) {
@@ -191,26 +242,77 @@ function formatTimeToHHMM(timeValue) {
 }
 
 function normalizeColumnKey(value) {
-    return String(value || "").toLowerCase().replace(/\s+/g, "");
+    return String(value || "").toLowerCase().replace(/[\s_-]+/g, "");
 }
 
-function isHiddenColumn(columnName) {
-    const hiddenRules = appData.company.hiddenColumns || [];
-    return hiddenRules.includes(normalizeColumnKey(columnName));
+function normalizeColumnList(value) {
+    if (Array.isArray(value)) return value.map(item => String(item || "").trim()).filter(Boolean);
+    if (typeof value === "string") return value.split(",").map(item => item.trim()).filter(Boolean);
+    return [];
+}
+
+function getNumberSetting(...values) {
+    const matched = values.find(value => {
+        const number = Number(value);
+        return Number.isFinite(number) && number > 0;
+    });
+    return matched === undefined ? null : Number(matched);
+}
+
+function resolveDisplayColumn(column, availableColumns) {
+    const cleanColumn = normalizeColumnKey(column);
+    const exactMatch = availableColumns.find(key => normalizeColumnKey(key) === cleanColumn);
+    if (exactMatch) return exactMatch;
+    if (cleanColumn === "status") {
+        return availableColumns.find(key => normalizeColumnKey(key).endsWith("status")) || column;
+    }
+    return column;
+}
+
+function getConfiguredLabel(label) {
+    const settings = appData.company.labelSettings || appData.company.labels || {};
+    if (Array.isArray(settings)) {
+        const match = settings.find(item => normalizeColumnKey(item.key) === normalizeColumnKey(label));
+        return match && match.label ? match.label : "";
+    }
+    if (settings && typeof settings === "object") {
+        const matchedKey = Object.keys(settings).find(key => normalizeColumnKey(key) === normalizeColumnKey(label));
+        return matchedKey ? settings[matchedKey] : "";
+    }
+    return "";
+}
+
+function formatColumnLabel(label) {
+    const configuredLabel = getConfiguredLabel(label);
+    if (configuredLabel) return configuredLabel;
+    return String(label || "")
+        .replace(/[_-]+/g, " ")
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\b\w/g, char => char.toUpperCase());
 }
 
 function getScheduleColumns(rows) {
     const systemColumns = ["routeid", "routecode"];
-    const preferredOrder = ["Departure Time", "Status", "Remarks"];
+    const preferredOrder = ["departureTime", "scheduleStatus", "routeStatus", "Status", "remarks"];
+    const displayColumns = normalizeColumnList(appData.company.displayColumns);
+    const hasDisplayColumns = displayColumns.length > 0;
     const seen = [];
 
     rows.forEach(row => {
         Object.keys(row).forEach(key => {
             const cleanKey = normalizeColumnKey(key);
-            if (!cleanKey || systemColumns.includes(cleanKey) || isHiddenColumn(key)) return;
+            if (!cleanKey || systemColumns.includes(cleanKey)) return;
             if (!seen.some(existing => normalizeColumnKey(existing) === cleanKey)) seen.push(key);
         });
     });
+
+    if (hasDisplayColumns) {
+        return displayColumns
+            .filter(column => !systemColumns.includes(normalizeColumnKey(column)))
+            .map(column => resolveDisplayColumn(column, seen));
+    }
 
     const nonEmptyColumns = seen.filter(key => rows.some(row => String(getSafeValue(row, key, "")).trim() !== ""));
     const availableColumns = nonEmptyColumns.length > 0 ? nonEmptyColumns : seen;
@@ -225,7 +327,7 @@ function getScheduleColumns(rows) {
         if (!orderedColumns.some(existing => normalizeColumnKey(existing) === normalizeColumnKey(key))) orderedColumns.push(key);
     });
 
-    return orderedColumns.length > 0 ? orderedColumns : preferredOrder.filter(key => !isHiddenColumn(key));
+    return orderedColumns.length > 0 ? orderedColumns : preferredOrder;
 }
 
 function getScheduleGridTemplate(headersList, compact = false) {
@@ -233,12 +335,12 @@ function getScheduleGridTemplate(headersList, compact = false) {
         const clean = normalizeColumnKey(header);
         if (compact) {
             if (clean.includes("time")) return "minmax(96px, 0.9fr)";
-            if (clean === "status") return "minmax(88px, 0.8fr)";
+            if (clean.endsWith("status")) return "minmax(88px, 0.8fr)";
             if (["remarks", "remark", "destination", "terminal", "notes", "note"].some(token => clean.includes(token))) return "minmax(120px, 1.2fr)";
             return "minmax(96px, 1fr)";
         }
         if (clean.includes("time")) return "minmax(130px, 0.8fr)";
-        if (clean === "status") return "minmax(110px, 0.7fr)";
+        if (clean.endsWith("status")) return "minmax(110px, 0.7fr)";
         if (["remarks", "remark", "destination", "terminal", "notes", "note"].some(token => clean.includes(token))) return "minmax(180px, 1.4fr)";
         return "minmax(140px, 1fr)";
     }).join(" ");
@@ -262,7 +364,7 @@ function renderScheduleCell(header, value, compact = false) {
         return `<span class="time-col" style="font-size:${fontSize}; font-weight:700;">${escapeHTML(formatTimeToHHMM(value))}</span>`;
     }
 
-    if (clean === "status") {
+    if (clean.endsWith("status")) {
         return `<span><strong class="${statusColorMapper(value)}" style="font-size:14px; font-weight:700;">${escapeHTML(String(value || "-").toUpperCase())}</strong></span>`;
     }
 
@@ -349,7 +451,7 @@ function renderActiveDashboardRoute() {
                 let subHTML = `
                     <div class="column-block dashboard-card-block">
                         <div class="single-fids-table-headings" style="${gridStyle}">
-                            ${headersList.map(h => `<span>${h}</span>`).join('')}
+                            ${headersList.map(h => `<span>${escapeHTML(formatColumnLabel(h))}</span>`).join('')}
                         </div>
                         <div class="fids-adaptive-flow-container">
                 `;
@@ -388,7 +490,7 @@ function renderActiveDashboardRoute() {
 function getChronologicalNextDeparture(targetSchedules) {
     const invalidStatuses = ["cancelled", "unavailable", "suspended"];
     const validSchedules = targetSchedules.filter(s => {
-        const statusVal = String(getSafeValue(s, "status")).trim().toLowerCase();
+        const statusVal = String(getSafeValue(s, "route_status") || getSafeValue(s, "status")).trim().toLowerCase();
         return !invalidStatuses.includes(statusVal);
     });
 
@@ -526,7 +628,7 @@ function renderInteractiveScheduleView(routeID) {
     const timetableHeaderBlock = document.querySelector(".timeline-title");
     if (timetableHeaderBlock) {
         timetableHeaderBlock.style = "display:grid; grid-template-columns: " + colWidths + "; gap:15px; padding:12px 24px; border-bottom:1px solid var(--border); background:var(--background); font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;";
-        timetableHeaderBlock.innerHTML = headersList.map(h => "<span>" + escapeHTML(h) + "</span>").join("");
+        timetableHeaderBlock.innerHTML = headersList.map(h => "<span>" + escapeHTML(formatColumnLabel(h)) + "</span>").join("");
     }
 
     const nextDepartureRow = isRouteActive ? getChronologicalNextDeparture(targetSchedules) : null;
@@ -536,7 +638,7 @@ function renderInteractiveScheduleView(routeID) {
         document.getElementById("nextDepartureStatus").className = "cancelled";
     } else if (nextDepartureRow) {
         const depTimeVal = getSafeValue(nextDepartureRow, "departuretime") || getSafeValue(nextDepartureRow, "time");
-        const statusVal = getSafeValue(nextDepartureRow, "status");
+        const statusVal = getSafeValue(nextDepartureRow, "route_status") || getSafeValue(nextDepartureRow, "status");
         document.getElementById("nextDepartureTime").innerHTML = formatTimeToHHMM(depTimeVal) || "--:--";
         document.getElementById("nextDepartureStatus").innerHTML = String(statusVal || "-").toUpperCase();
         document.getElementById("nextDepartureStatus").className = statusColorMapper(statusVal);

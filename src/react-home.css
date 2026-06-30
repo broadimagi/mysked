@@ -195,7 +195,8 @@ body.react-home-mode::before {
 .react-home .maintenance-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10000; }
 .react-home .maintenance-content { text-align: center; padding: 40px; max-width: 500px; }
 .react-home .maintenance-title { font-size: 36px; font-weight: 900; color: #ffffff; margin-bottom: 12px; }
-.react-home .maintenance-message { color: var(--home-muted); font-size: 16px; line-height: 1.6; margin-bottom: 24px; }
+.react-home .maintenance-message { color: var(--home-muted); font-size: 16px; line-height: 1.6; margin-bottom: 12px; }
+.react-home .support-link { margin-bottom: 18px; color: var(--home-primary); }
 .react-home .maintenance-time { font-size: 12px; color: #6b7280; margin-top: 16px; }
 .react-home .loading { display: inline-block; width: 12px; height: 12px; background: var(--home-primary); border-radius: 50%; animation: blink 1.4s infinite; }
 .react-home .loading:nth-child(2) { animation-delay: 0.2s; }

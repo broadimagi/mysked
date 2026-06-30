@@ -224,6 +224,8 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 #loadingScreen { position: fixed; inset: 0; background: #07090e; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; }
 #loadingScreen h1 { font-size: 32px; font-weight: 900; color: #fff; margin-bottom: 4px; letter-spacing: 0; }
 #loadingScreen p { font-size: 12px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.support-link { display: inline-flex; margin-top: 12px; color: var(--primary, #7dd3fc); font-size: 13px; font-weight: 800; text-decoration: none; text-transform: none; letter-spacing: 0; }
+.support-link:hover { text-decoration: underline; }
 .loader { border: 3px solid #171d34; border-top: 3px solid #a78bfa; border-radius: 50%; width: 32px; height: 32px; animation: spin 0.8s linear infinite; margin-bottom: 18px; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 .hidden { display: none !important; }
