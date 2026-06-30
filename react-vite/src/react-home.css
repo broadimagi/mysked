@@ -192,6 +192,7 @@ body.react-home-mode::before {
 }
 .react-home .footer-link { color: var(--home-muted); text-decoration: none; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; transition: color 0.2s ease; }
 .react-home .footer-link:hover { color: var(--home-primary); }
+.react-home .platform-version { color: var(--home-muted); font-weight: 800; }
 .react-home .maintenance-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10000; }
 .react-home .maintenance-content { text-align: center; padding: 40px; max-width: 500px; }
 .react-home .maintenance-title { font-size: 36px; font-weight: 900; color: #ffffff; margin-bottom: 12px; }

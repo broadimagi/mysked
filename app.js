@@ -8,6 +8,7 @@ let masterRefreshInterval = null;
 let headerRefreshInterval = null;
 let themeManuallySet = false;
 let lastSyncedAt = null;
+let isMaintenanceMode = false;
 
 function getSafeValue(obj, targetKey, fallback = "") {
     if (!obj) return fallback;
@@ -53,6 +54,17 @@ function getSupportEmail(globalSettings = {}) {
     return getSettingValue(globalSettings, "ContactSupportEmail", "");
 }
 
+function getPlatformVersion(globalSettings = {}) {
+    return getSettingValue(globalSettings, "PlatformVersion", "");
+}
+
+function getMaintenanceRefreshSeconds(globalSettings = {}) {
+    return getNumberSetting(
+        getSettingValue(globalSettings, "MaintenanceRefresh"),
+        getSettingValue(globalSettings, "MaintenanceRefreshSeconds")
+    ) || 30;
+}
+
 window.onload = () => {
     const urlParams = new URLSearchParams(window.location.search);
     let operatorCode = urlParams.get('operator'); 
@@ -74,7 +86,7 @@ window.onload = () => {
 
 async function initApplication(operatorCode) {
     await loadDashboardData(operatorCode, true, "all");
-    const refreshSeconds = getNumberSetting(appData.company.refreshSeconds) || 60;
+    const refreshSeconds = isMaintenanceMode ? getMaintenanceRefreshSeconds(appData.globalSettings) : (getNumberSetting(appData.company.refreshSeconds) || 60);
     const refreshMs = refreshSeconds * 1000;
 
     clearInterval(masterRefreshInterval);
@@ -91,20 +103,25 @@ async function loadDashboardData(operatorCode, isFirstLoad, refreshScope = "all"
         
         if (data.maintenance) {
             appData = { ...appData, globalSettings: data.globalSettings || {} };
+            isMaintenanceMode = true;
             const platformName = getPlatformName(appData.globalSettings);
             const supportEmail = getSupportEmail(appData.globalSettings);
+            const maintenanceRefreshSeconds = getMaintenanceRefreshSeconds(appData.globalSettings);
             document.body.innerHTML = `
                 <div style="height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; background:#07090e; color:#fff; font-family:sans-serif; text-align:center; padding:20px;">
                     <h1 style="font-size:40px; margin-bottom:10px; color:var(--fids-amber);">${escapeHTML(platformName)}</h1>
                     <p style="color:#9ca3af; font-size:16px;">${escapeHTML(data.message || getSettingValue(appData.globalSettings, "MaintenanceMessage", "System maintenance is in progress."))}</p>
                     ${supportEmail ? `<a href="mailto:${escapeHTML(supportEmail)}" style="color:#7dd3fc; font-size:13px; font-weight:800; text-decoration:none;">${escapeHTML(supportEmail)}</a>` : ""}
+                    <p style="color:#6b7280; font-size:13px; margin-top:14px;">Checking again in ${maintenanceRefreshSeconds}s</p>
                 </div>
             `;
+            setTimeout(() => { window.location.reload(); }, maintenanceRefreshSeconds * 1000);
             return;
         }
 
         if (!data.success) {
             appData = { ...appData, globalSettings: data.globalSettings || appData.globalSettings || {} };
+            isMaintenanceMode = false;
             if (data.code === "NO_OPERATOR") {
                 showStartupError("No operator was selected. Returning to the homepage in 3 seconds.");
                 setTimeout(() => { window.location.href = "index.html"; }, 3000);
@@ -114,6 +131,7 @@ async function loadDashboardData(operatorCode, isFirstLoad, refreshScope = "all"
             return;
         }
         appData = data;
+        isMaintenanceMode = false;
         lastSyncedAt = new Date();
 
         const shouldRefreshHeader = isFirstLoad || refreshScope === "all" || refreshScope === "header";
@@ -671,6 +689,8 @@ function renderUnifiedVariableFooter() {
                            syncDate.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", hour12: true });
 
     const rawFooterText = appData.company.footerText || "mySked DB";
+    const platformName = getPlatformName(appData.globalSettings);
+    const platformVersion = getPlatformVersion(appData.globalSettings);
 
     const footerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center; width:100%; font-size:12px; color:var(--muted); font-weight:500;">
@@ -678,7 +698,7 @@ function renderUnifiedVariableFooter() {
             <div style="flex: 1; text-align: center; text-transform: none; font-weight: 500; color:var(--text);">${rawFooterText}</div>
             <div style="flex: 1; text-align: right;">
                 <a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer" style="color:var(--primary); text-decoration:none; font-weight:600;">
-                    MySked Powered by Broadimagi
+                    ${escapeHTML(platformName)} Powered by Broadimagi${platformVersion ? ` <span class="platform-version">${escapeHTML(platformVersion)}</span>` : ""}
                 </a>
             </div>
         </div>

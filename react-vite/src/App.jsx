@@ -47,6 +47,17 @@ function getSupportEmail(globalSettings = {}) {
     return getSettingValue(globalSettings, "ContactSupportEmail", "");
 }
 
+function getPlatformVersion(globalSettings = {}) {
+    return getSettingValue(globalSettings, "PlatformVersion", "");
+}
+
+function getMaintenanceRefreshSeconds(globalSettings = {}) {
+    return getNumberSetting(
+        getSettingValue(globalSettings, "MaintenanceRefresh"),
+        getSettingValue(globalSettings, "MaintenanceRefreshSeconds")
+    ) || 30;
+}
+
 function normalizeColumnKey(value) {
     return String(value || "").toLowerCase().replace(/[\s_-]+/g, "");
 }
@@ -272,6 +283,8 @@ function HomePage() {
     const [globalSettings, setGlobalSettings] = useState({});
     const platformName = getPlatformName(globalSettings);
     const supportEmail = getSupportEmail(globalSettings);
+    const platformVersion = getPlatformVersion(globalSettings);
+    const maintenanceRefreshSeconds = getMaintenanceRefreshSeconds(globalSettings);
 
     useEffect(() => {
         document.body.className = "react-home-mode";
@@ -309,6 +322,14 @@ function HomePage() {
         loadOperators();
         return () => { alive = false; };
     }, []);
+
+    useEffect(() => {
+        if (!maintenance) return undefined;
+        const timer = setTimeout(() => {
+            window.location.reload();
+        }, maintenanceRefreshSeconds * 1000);
+        return () => clearTimeout(timer);
+    }, [maintenance, maintenanceRefreshSeconds]);
 
     const serviceCount = loading ? "Loading services..." : operators.length === 0 ? "0 services" : `${operators.length} ${operators.length === 1 ? "service" : "services"} ready`;
 
@@ -366,21 +387,21 @@ function HomePage() {
                         <h1 className="maintenance-title">We'll be right back</h1>
                         <p className="maintenance-message">{maintenance.message}</p>
                         {supportEmail && <a className="support-link" href={`mailto:${supportEmail}`}>{supportEmail}</a>}
-                        <div style={{ color: "#6b7280", fontSize: 13 }}>Checking status <span className="loading"></span><span className="loading"></span><span className="loading"></span></div>
+                        <div style={{ color: "#6b7280", fontSize: 13 }}>Checking again in {maintenanceRefreshSeconds}s <span className="loading"></span><span className="loading"></span><span className="loading"></span></div>
                         <div className="maintenance-time">{maintenance.time}</div>
                     </div>
                 </div>
             )}
 
-            <footer><a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer" className="footer-link">{platformName} Powered by Broadimagi</a></footer>
+            <footer><a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer" className="footer-link">{platformName} Powered by Broadimagi{platformVersion && <span className="platform-version"> {platformVersion}</span>}</a></footer>
         </div>
     );
 }
 
-function LoadingScreen({ error, platformName = "mySked", supportEmail = "" }) {
+function LoadingScreen({ error, platformName = "mySked", supportEmail = "", maintenanceRefreshSeconds = 0 }) {
     return (
         <div id="loadingScreen">
-            {error ? <><h1>{platformName}</h1><p style={{ maxWidth: 420, textAlign: "center", lineHeight: 1.6, textTransform: "none", letterSpacing: 0, color: "#9ca3af" }}>{error}</p>{supportEmail && <a className="support-link" href={`mailto:${supportEmail}`}>{supportEmail}</a>}</> : <><div className="loader"></div><h1>{platformName}</h1><p>Syncing Live Variable Workspace Pipelines...</p></>}
+            {error ? <><h1>{platformName}</h1><p style={{ maxWidth: 420, textAlign: "center", lineHeight: 1.6, textTransform: "none", letterSpacing: 0, color: "#9ca3af" }}>{error}</p>{maintenanceRefreshSeconds > 0 && <p style={{ marginTop: 10 }}>Checking again in {maintenanceRefreshSeconds}s</p>}{supportEmail && <a className="support-link" href={`mailto:${supportEmail}`}>{supportEmail}</a>}</> : <><div className="loader"></div><h1>{platformName}</h1><p>Syncing Live Variable Workspace Pipelines...</p></>}
         </div>
     );
 }
@@ -574,7 +595,9 @@ function Footer({ data, lastSyncedAt }) {
     const syncDate = lastSyncedAt || new Date();
     const lastUpdatedStr = syncDate.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) + " " + syncDate.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", hour12: true });
     const rawFooterText = data.company.footerText || "mySked DB";
-    return <footer className="footer-bar-container"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", fontSize: 12, color: "var(--muted)", fontWeight: 500 }}><div style={{ flex: 1, textAlign: "left" }}>Last Synced: <span style={{ color: "var(--text-strong)", fontWeight: 600 }}>{lastUpdatedStr}</span></div><div style={{ flex: 1, textAlign: "center", textTransform: "none", fontWeight: 500, color: "var(--text)" }}>{rawFooterText}</div><div style={{ flex: 1, textAlign: "right" }}><a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>MySked Powered by Broadimagi</a></div></div></footer>;
+    const platformName = getPlatformName(data.globalSettings);
+    const platformVersion = getPlatformVersion(data.globalSettings);
+    return <footer className="footer-bar-container"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", fontSize: 12, color: "var(--muted)", fontWeight: 500 }}><div style={{ flex: 1, textAlign: "left" }}>Last Synced: <span style={{ color: "var(--text-strong)", fontWeight: 600 }}>{lastUpdatedStr}</span></div><div style={{ flex: 1, textAlign: "center", textTransform: "none", fontWeight: 500, color: "var(--text)" }}>{rawFooterText}</div><div style={{ flex: 1, textAlign: "right" }}><a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>{platformName} Powered by Broadimagi{platformVersion && <span className="platform-version"> {platformVersion}</span>}</a></div></div></footer>;
 }
 
 function DashboardPage({ operatorCode }) {
@@ -588,10 +611,13 @@ function DashboardPage({ operatorCode }) {
     const [theme, setTheme] = useState("dark");
     const [themeManuallySet, setThemeManuallySet] = useState(false);
     const [lastSyncedAt, setLastSyncedAt] = useState(null);
+    const [maintenanceMode, setMaintenanceMode] = useState(false);
     const globalSettings = data.globalSettings || {};
     const platformName = getPlatformName(globalSettings);
     const supportEmail = getSupportEmail(globalSettings);
     const refreshSeconds = getNumberSetting(data.company.refreshSeconds) || 60;
+    const maintenanceRefreshSeconds = getMaintenanceRefreshSeconds(globalSettings);
+    const activeRefreshSeconds = maintenanceMode ? maintenanceRefreshSeconds : refreshSeconds;
     const cycleSeconds = getNumberSetting(data.company.cycleSeconds) || 15;
 
     useEffect(() => { document.body.className = viewMode === "selection" ? "selection-mode" : ""; }, [viewMode]);
@@ -608,11 +634,13 @@ function DashboardPage({ operatorCode }) {
                 if (next.maintenance) {
                     setData(current => ({ ...current, globalSettings: next.globalSettings || current.globalSettings || {} }));
                     setError(next.message || getSettingValue(next.globalSettings, "MaintenanceMessage", "System maintenance is in progress."));
+                    setMaintenanceMode(true);
                     setLoading(false);
                     return;
                 }
                 if (!next.success) {
                     setData(current => ({ ...current, globalSettings: next.globalSettings || current.globalSettings || {} }));
+                    setMaintenanceMode(false);
                     if (next.code === "NO_OPERATOR") {
                         setError("No operator was selected. Returning to the homepage in 3 seconds.");
                         setTimeout(() => { window.location.href = "/"; }, 3000);
@@ -623,6 +651,8 @@ function DashboardPage({ operatorCode }) {
                     return;
                 }
                 setData(next);
+                setError("");
+                setMaintenanceMode(false);
                 setLastSyncedAt(new Date());
                 if (isFirstLoad && !themeManuallySet) setTheme(next.company.themeMode || "dark");
                 const firstActive = next.routes.find(r => String(getSafeValue(r, "status")).toLowerCase() === "active");
@@ -635,9 +665,9 @@ function DashboardPage({ operatorCode }) {
             }
         }
         loadData(true);
-        const master = setInterval(() => loadData(false), refreshSeconds * 1000);
+        const master = setInterval(() => loadData(false), activeRefreshSeconds * 1000);
         return () => { alive = false; clearInterval(master); };
-    }, [operatorCode, refreshSeconds]);
+    }, [operatorCode, activeRefreshSeconds]);
 
     useEffect(() => {
         const cycleMs = cycleSeconds * 1000;
@@ -653,7 +683,7 @@ function DashboardPage({ operatorCode }) {
         setTheme(current => current === "light" ? "dark" : "light");
     }
 
-    if (loading || error) return <LoadingScreen error={error} platformName={platformName} supportEmail={supportEmail} />;
+    if (loading || error) return <LoadingScreen error={error} platformName={platformName} supportEmail={supportEmail} maintenanceRefreshSeconds={maintenanceMode ? maintenanceRefreshSeconds : 0} />;
 
     return (
         <div id="app">
