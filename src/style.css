@@ -55,10 +55,10 @@ html[data-theme="light"] .sun-icon { display: none; }
 #currentDate { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
 
 /* ANNOUNCEMENT TICKER RUNNER */
-#announcementBar { background: var(--primary); height: 32px; display: flex; align-items: center; overflow: hidden; position: relative; border-bottom: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; }
-.ticker-title { background: rgba(0, 0, 0, 0.25); color: #fff; padding: 0 16px; height: 100%; display: flex; align-items: center; font-size: 11px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; z-index: 10; box-shadow: 5px 0 15px rgba(0,0,0,0.15); }
+#announcementBar { background: var(--marquee-bg, var(--primary)); color: var(--marquee-text, #ffffff); height: 32px; display: flex; align-items: center; overflow: hidden; position: relative; border-bottom: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; }
+.ticker-title { background: var(--marquee-label-bg, rgba(0, 0, 0, 0.25)); color: var(--marquee-label-text, #ffffff); padding: 0 16px; height: 100%; display: flex; align-items: center; font-size: 11px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; z-index: 10; box-shadow: 5px 0 15px rgba(0,0,0,0.15); }
 .ticker-wrap { flex: 1; overflow: hidden; display: flex; align-items: center; }
-#ticker { display: inline-block; white-space: nowrap; font-size: 13px; font-weight: 700; color: #ffffff; padding-left: 100%; animation: marquee 30s linear infinite; }
+#ticker { display: inline-block; white-space: nowrap; font-size: 13px; font-weight: 700; color: inherit; padding-left: 100%; animation: marquee 30s linear infinite; }
 .ticker-item { display: inline-block; }
 .ticker-gap { display: inline-block; width: clamp(80px, 14vw, 220px); }
 

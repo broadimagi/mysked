@@ -255,6 +255,30 @@ function normalizeLogoURL(url) {
     return rawURL;
 }
 
+function getReadableTextColor(color) {
+    const raw = String(color || "").trim();
+    const hex = raw.match(/^#?([a-f\d]{3}|[a-f\d]{6})$/i);
+    if (!hex) return "#ffffff";
+    const fullHex = hex[1].length === 3 ? hex[1].split("").map(char => char + char).join("") : hex[1];
+    const red = parseInt(fullHex.slice(0, 2), 16);
+    const green = parseInt(fullHex.slice(2, 4), 16);
+    const blue = parseInt(fullHex.slice(4, 6), 16);
+    const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+    return luminance > 0.58 ? "#111827" : "#ffffff";
+}
+
+function applyOperatorTheme(primaryColor) {
+    if (!primaryColor) return;
+    const primaryText = getReadableTextColor(primaryColor);
+    const labelBg = primaryText === "#ffffff" ? "rgba(0, 0, 0, 0.28)" : "rgba(255, 255, 255, 0.36)";
+    document.documentElement.style.setProperty("--primary", primaryColor);
+    document.documentElement.style.setProperty("--primary-contrast", primaryText);
+    document.documentElement.style.setProperty("--marquee-bg", primaryColor);
+    document.documentElement.style.setProperty("--marquee-text", primaryText);
+    document.documentElement.style.setProperty("--marquee-label-bg", labelBg);
+    document.documentElement.style.setProperty("--marquee-label-text", primaryText);
+}
+
 function useClock() {
     const [now, setNow] = useState(new Date());
     useEffect(() => {
@@ -622,7 +646,7 @@ function DashboardPage({ operatorCode }) {
 
     useEffect(() => { document.body.className = viewMode === "selection" ? "selection-mode" : ""; }, [viewMode]);
     useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, [theme]);
-    useEffect(() => { if (data.company.primaryColor) document.documentElement.style.setProperty("--primary", data.company.primaryColor); }, [data.company.primaryColor]);
+    useEffect(() => { applyOperatorTheme(data.company.primaryColor); }, [data.company.primaryColor]);
 
     useEffect(() => {
         let alive = true;
