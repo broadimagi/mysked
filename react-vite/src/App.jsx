@@ -250,7 +250,7 @@ function HomePage() {
                     {operators.length > 0 ? (
                         <div className="grid">
                             {operators.map(op => (
-                                <a key={op.code} href={`react.html?operator=${encodeURIComponent(op.code)}`} className="operator-card">
+                                <a key={op.code} href={`dashboard.html?operator=${encodeURIComponent(op.code)}`} className="operator-card">
                                     <div className="meta"><div className="name">{op.name}</div><div className="desc">{op.desc}</div></div>
                                 </a>
                             ))}
