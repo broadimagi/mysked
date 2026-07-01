@@ -58,6 +58,28 @@ function getMaintenanceRefreshSeconds(globalSettings = {}) {
     ) || 30;
 }
 
+function setPageMetadata({ title, description, canonical }) {
+    if (title) document.title = title;
+    if (description) {
+        let metaDescription = document.querySelector('meta[name="description"]');
+        if (!metaDescription) {
+            metaDescription = document.createElement("meta");
+            metaDescription.setAttribute("name", "description");
+            document.head.appendChild(metaDescription);
+        }
+        metaDescription.setAttribute("content", description);
+    }
+    if (canonical) {
+        let canonicalLink = document.querySelector('link[rel="canonical"]');
+        if (!canonicalLink) {
+            canonicalLink = document.createElement("link");
+            canonicalLink.setAttribute("rel", "canonical");
+            document.head.appendChild(canonicalLink);
+        }
+        canonicalLink.setAttribute("href", canonical);
+    }
+}
+
 function normalizeColumnKey(value) {
     return String(value || "").toLowerCase().replace(/[\s_-]+/g, "");
 }
@@ -313,6 +335,11 @@ function HomePage() {
     useEffect(() => {
         document.body.className = "react-home-mode";
         document.documentElement.setAttribute("data-theme", "dark");
+        setPageMetadata({
+            title: "mySked Live Transport Schedules",
+            description: "Select a mySked operator to view live route schedules, advisories, and passenger information dashboards.",
+            canonical: "https://mysked.broadimagi.com/"
+        });
     }, []);
 
     useEffect(() => {
@@ -647,6 +674,16 @@ function DashboardPage({ operatorCode }) {
     useEffect(() => { document.body.className = viewMode === "selection" ? "selection-mode" : ""; }, [viewMode]);
     useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, [theme]);
     useEffect(() => { applyOperatorTheme(data.company.primaryColor); }, [data.company.primaryColor]);
+    useEffect(() => {
+        if (!data.company.companyName) return;
+        const title = `${data.company.companyName} Live Schedule | mySked`;
+        const description = `Live route schedules, advisories, and passenger information for ${data.company.companyName}.`;
+        setPageMetadata({
+            title,
+            description,
+            canonical: `https://mysked.broadimagi.com/?operator=${encodeURIComponent(operatorCode)}`
+        });
+    }, [data.company.companyName, operatorCode]);
 
     useEffect(() => {
         let alive = true;

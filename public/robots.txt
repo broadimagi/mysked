@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mysked.broadimagi.com/sitemap.xml
