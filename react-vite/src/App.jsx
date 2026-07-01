@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
 const API_URL = "https://script.google.com/macros/s/AKfycby778WwSXHTuZcVC2iT4U3wkrn5pYOpXOuCVZQQ3Oo47cuLqbhyFpEm_6RRrgdcF9s/exec";
 const emptyData = { globalSettings: {}, company: {}, routes: [], schedules: [], advisories: [] };
+const SOUND_PERMISSION_KEY = "myskedScheduleSoundPreference";
 
 function getSafeValue(obj, targetKey, fallback = "") {
     if (!obj) return fallback;
@@ -135,6 +136,22 @@ function getRouteNameForSchedule(row, routes = []) {
     return matchedRoute ? getSafeValue(matchedRoute, "route") || getSafeValue(matchedRoute, "routeName") : "Schedule";
 }
 
+function getRouteForSchedule(row, routes = []) {
+    const rowRouteId = normalizeRouteId(getSafeValue(row, "routeid"));
+    const rowRouteName = normalizeColumnKey(getSafeValue(row, "route") || getSafeValue(row, "routeName"));
+    return routes.find(route => {
+        const routeId = normalizeRouteId(getSafeValue(route, "routeid") || getSafeValue(route, "routecode"));
+        const routeName = normalizeColumnKey(getSafeValue(route, "route") || getSafeValue(route, "routeName"));
+        return (rowRouteId && routeId === rowRouteId) || (rowRouteName && routeName === rowRouteName);
+    });
+}
+
+function isScheduleRouteActive(row, routes = []) {
+    const matchedRoute = getRouteForSchedule(row, routes);
+    if (!matchedRoute) return false;
+    return normalizeColumnKey(getSafeValue(matchedRoute, "status")) === "active";
+}
+
 function findScheduleStatusChanges(previousSnapshot, nextData) {
     if (!previousSnapshot) return [];
     const nextSnapshot = getScheduleStatusSnapshot(nextData.schedules);
@@ -142,6 +159,7 @@ function findScheduleStatusChanges(previousSnapshot, nextData) {
     for (const [key, nextItem] of nextSnapshot.entries()) {
         const previousItem = previousSnapshot.get(key);
         if (!previousItem) continue;
+        if (!isScheduleRouteActive(nextItem.row, nextData.routes)) continue;
         const previousStatus = normalizeColumnKey(previousItem.status);
         const nextStatus = normalizeColumnKey(nextItem.status);
         if (previousStatus && nextStatus && previousStatus !== nextStatus) {
@@ -190,7 +208,59 @@ function playFallbackPopupChime() {
     }
 }
 
+function getSoundPreference() {
+    try {
+        return localStorage.getItem(SOUND_PERMISSION_KEY) || "";
+    } catch (error) {
+        return "";
+    }
+}
+
+function setSoundPreference(value) {
+    try {
+        localStorage.setItem(SOUND_PERMISSION_KEY, value);
+    } catch (error) {
+        // Storage can be unavailable in private browsing; the current click still unlocks this page.
+    }
+}
+
+async function unlockSchedulePopupSound(company = {}) {
+    window.__myskedScheduleSoundUnlocked = true;
+
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (AudioContext) {
+        try {
+            const context = new AudioContext();
+            if (context.state === "suspended") await context.resume();
+            const oscillator = context.createOscillator();
+            const gain = context.createGain();
+            gain.gain.setValueAtTime(0.0001, context.currentTime);
+            oscillator.connect(gain);
+            gain.connect(context.destination);
+            oscillator.start();
+            oscillator.stop(context.currentTime + 0.05);
+            setTimeout(() => context.close().catch(() => {}), 120);
+        } catch (error) {
+            // Some browsers only unlock the HTML audio element below.
+        }
+    }
+
+    const soundURL = getSettingValue(company, "schedulePopupSound", getSettingValue(company, "schedulePopupSoundURL", "/schedule-popup.mp3"));
+    if (!soundURL) return;
+    try {
+        const audio = new Audio(soundURL);
+        audio.muted = true;
+        audio.volume = 0;
+        await audio.play();
+        audio.pause();
+        audio.currentTime = 0;
+    } catch (error) {
+        // The user's click still helps unlock future AudioContext playback.
+    }
+}
+
 function playSchedulePopupSound(company = {}) {
+    if (getSoundPreference() !== "enabled" && !window.__myskedScheduleSoundUnlocked) return;
     const soundURL = getSettingValue(company, "schedulePopupSound", getSettingValue(company, "schedulePopupSoundURL", "/schedule-popup.mp3"));
     if (!soundURL) {
         playFallbackPopupChime();
@@ -275,27 +345,97 @@ function getScheduleColumns(rows, company) {
     return orderedColumns.length > 0 ? orderedColumns : preferredOrder;
 }
 
-function getScheduleGridTemplate(headersList, compact = false) {
+function getColumnDisplayValue(header, row) {
+    const clean = normalizeColumnKey(header);
+    const value = getSafeValue(row, header, "-");
+    if (clean.includes("time")) return formatTimeToHHMM(value);
+    if (clean.endsWith("status")) return String(value || "-").toUpperCase();
+    return String(value || "-");
+}
+
+function getColumnWeight(header, rows = [], compact = false, company = {}) {
+    const clean = normalizeColumnKey(header);
+    const labelLength = formatColumnLabel(header, company).length;
+    const valueLength = rows.reduce((longest, row) => Math.max(longest, getColumnDisplayValue(header, row).length), 0);
+    const contentLength = Math.max(labelLength, valueLength, 1);
+    let weight = Math.sqrt(contentLength);
+
+    if (clean.includes("time")) weight += 0.6;
+    if (clean.endsWith("status")) weight += 1.2;
+    if (["remarks", "remark", "destination", "terminal", "notes", "note"].some(token => clean.includes(token))) weight += 1.4;
+    if (contentLength <= 2) weight *= 0.55;
+
+    const minimum = compact ? 0.45 : 0.55;
+    const maximum = compact ? 1.8 : 2.15;
+    return Math.max(minimum, Math.min(maximum, Number(weight.toFixed(2))));
+}
+
+function getScheduleGridTemplate(headersList, compact = false, rows = [], company = {}) {
     return headersList.map(header => {
         const clean = normalizeColumnKey(header);
-        if (compact) {
-            if (clean.includes("time")) return "minmax(96px, 0.9fr)";
-            if (clean.endsWith("status")) return "minmax(88px, 0.8fr)";
-            if (["remarks", "remark", "destination", "terminal", "notes", "note"].some(token => clean.includes(token))) return "minmax(120px, 1.2fr)";
-            return "minmax(96px, 1fr)";
-        }
-        const isNarrow = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
-        if (isNarrow) {
-            if (clean.includes("time")) return "minmax(62px, 0.8fr)";
-            if (clean.endsWith("status")) return "minmax(68px, 0.85fr)";
-            if (["remarks", "remark", "destination", "terminal", "notes", "note"].some(token => clean.includes(token))) return "minmax(78px, 1fr)";
-            return "minmax(54px, 1fr)";
-        }
-        if (clean.includes("time")) return "minmax(130px, 0.8fr)";
-        if (clean.endsWith("status")) return "minmax(110px, 0.7fr)";
-        if (["remarks", "remark", "destination", "terminal", "notes", "note"].some(token => clean.includes(token))) return "minmax(180px, 1.4fr)";
-        return "minmax(140px, 1fr)";
+        const isNarrow = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 1024px)").matches;
+        const weight = getColumnWeight(header, rows, compact, company);
+        const narrowBoost = isNarrow && clean.endsWith("status") ? 0.18 : 0;
+        return `minmax(0, ${(weight + narrowBoost).toFixed(2)}fr)`;
     }).join(" ");
+}
+
+function getScheduleLayoutVars(headersList, options = {}) {
+    const columnCount = Math.max(1, headersList.length);
+    const isNarrow = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 1024px)").matches;
+    const isMainDashboard = Boolean(options.mainDashboard);
+
+    if (isNarrow) {
+        const fontSize = columnCount <= 3
+            ? (isMainDashboard ? "clamp(14px, 3.4vw, 18px)" : "clamp(13px, 3vw, 17px)")
+            : columnCount === 4
+                ? (isMainDashboard ? "clamp(11.5px, 2.55vw, 16px)" : "clamp(10.5px, 2.25vw, 15px)")
+                : (isMainDashboard ? "clamp(9.5px, 2vw, 13.5px)" : "clamp(9px, 1.75vw, 12.5px)");
+        return {
+            "--schedule-cell-font-size": fontSize,
+            "--schedule-heading-font-size": columnCount <= 4 ? "clamp(8px, 1.8vw, 11px)" : "clamp(7px, 1.45vw, 9.5px)",
+            "--schedule-row-min-height": columnCount <= 4
+                ? (isMainDashboard ? "clamp(52px, 10vw, 66px)" : "clamp(44px, 8vw, 58px)")
+                : (isMainDashboard ? "clamp(46px, 8.5vw, 58px)" : "clamp(38px, 7vw, 50px)"),
+            "--schedule-row-padding-y": columnCount <= 4 ? (isMainDashboard ? "11px" : "9px") : (isMainDashboard ? "8px" : "6px"),
+            "--schedule-row-padding-x": columnCount <= 4 ? "10px" : "6px",
+            "--schedule-row-gap": columnCount <= 4 ? "7px" : "4px"
+        };
+    }
+
+    if (options.mainDashboard && options.rowsPerCard) {
+        const viewportHeight = options.viewportHeight || window.innerHeight || 800;
+        const reservedHeight = 280;
+        const availableHeight = Math.max(380, viewportHeight - reservedHeight);
+        const rowHeight = Math.max(42, Math.min(68, Math.floor(availableHeight / options.rowsPerCard)));
+        const fontScale = columnCount <= 3 ? 0.36 : columnCount === 4 ? 0.32 : columnCount <= 6 ? 0.27 : 0.23;
+        const fontSize = Math.max(columnCount <= 4 ? 12 : 10, Math.min(columnCount <= 4 ? 22 : 16, Math.floor(rowHeight * fontScale)));
+        const paddingY = Math.max(6, Math.floor((rowHeight - fontSize * 1.15) / 2));
+        return {
+            "--schedule-cell-font-size": `${fontSize}px`,
+            "--schedule-heading-font-size": columnCount <= 4 ? "11px" : "10px",
+            "--schedule-row-min-height": `${rowHeight}px`,
+            "--schedule-row-padding-y": `${paddingY}px`,
+            "--schedule-row-padding-x": columnCount <= 4 ? "24px" : "16px",
+            "--schedule-row-gap": columnCount <= 4 ? "12px" : "8px"
+        };
+    }
+
+    const fontSize = columnCount <= 3
+        ? "clamp(15px, 1.05vw, 18px)"
+        : columnCount === 4
+            ? "clamp(13px, 0.9vw, 16px)"
+            : columnCount <= 6
+                ? "clamp(11px, 0.78vw, 14px)"
+                : "clamp(10px, 0.65vw, 12px)";
+    return {
+        "--schedule-cell-font-size": fontSize,
+        "--schedule-heading-font-size": columnCount <= 4 ? "11px" : "10px",
+        "--schedule-row-min-height": columnCount <= 4 ? "42px" : "38px",
+        "--schedule-row-padding-y": columnCount <= 4 ? "8px" : "7px",
+        "--schedule-row-padding-x": columnCount <= 4 ? "24px" : "16px",
+        "--schedule-row-gap": columnCount <= 4 ? "12px" : "8px"
+    };
 }
 
 function formatTimeToHHMM(timeValue) {
@@ -421,6 +561,29 @@ function useClock() {
         time: now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }),
         date: now.toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
     };
+}
+
+function useViewportSize() {
+    const getSize = () => ({
+        width: typeof window !== "undefined" ? window.innerWidth : 0,
+        height: typeof window !== "undefined" ? window.innerHeight : 0
+    });
+    const [size, setSize] = useState(getSize);
+    useEffect(() => {
+        let frame = null;
+        const update = () => {
+            if (frame) cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => setSize(getSize()));
+        };
+        window.addEventListener("resize", update);
+        window.addEventListener("orientationchange", update);
+        return () => {
+            if (frame) cancelAnimationFrame(frame);
+            window.removeEventListener("resize", update);
+            window.removeEventListener("orientationchange", update);
+        };
+    }, []);
+    return size;
 }
 
 function normalizeOperator(op) {
@@ -635,23 +798,37 @@ function Ticker({ data }) {
 
 function ScheduleCell({ header, value, compact, company }) {
     const clean = normalizeColumnKey(header);
-    const fontSize = compact ? "14px" : "15px";
-    if (clean.includes("time")) return <span className="time-col" style={{ fontSize, fontWeight: 700 }}>{formatTimeToHHMM(value)}</span>;
-    if (clean.endsWith("status")) return <span><strong className={statusColorMapper(value, company)} style={{ fontSize: 14, fontWeight: 700 }}>{String(value || "-").toUpperCase()}</strong></span>;
-    return <span className="text-col" style={{ fontSize: 14, fontWeight: 600 }}>{value || "-"}</span>;
+    if (clean.includes("time")) return <span className="time-col">{formatTimeToHHMM(value)}</span>;
+    if (clean.endsWith("status")) return <span><strong className={statusColorMapper(value, company)}>{String(value || "-").toUpperCase()}</strong></span>;
+    return <span className="text-col">{value || "-"}</span>;
 }
 
-function getDashboardRowsPerCard() { return 10; }
+function getDashboardRowContentSize(headersList = [], rows = []) {
+    return rows.reduce((longest, row) => {
+        const rowLongest = headersList.reduce((rowMax, header) => Math.max(rowMax, getColumnDisplayValue(header, row).length), 0);
+        return Math.max(longest, rowLongest);
+    }, 0);
+}
 
-function splitRowsForDashboard(rows) {
-    const rowsPerCard = getDashboardRowsPerCard();
-    const isMobileDashboard = window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+function getDashboardRowsPerCard(headersList = [], rows = [], viewportHeight = 0) {
+    const isMobileDashboard = window.matchMedia && window.matchMedia("(max-width: 1024px)").matches;
+    if (isMobileDashboard) return 1;
+    const height = viewportHeight || window.innerHeight || 800;
+    const availableHeight = Math.max(260, height - 280);
+    const longestContent = getDashboardRowContentSize(headersList, rows);
+    const contentBoost = Math.max(0, Math.min(22, (longestContent - 12) * 1.8));
+    const comfortableRowHeight = 50 + contentBoost;
+    return Math.max(5, Math.min(10, Math.floor(availableHeight / comfortableRowHeight)));
+}
+
+function splitRowsForDashboard(rows, rowsPerCard) {
+    const isMobileDashboard = window.matchMedia && window.matchMedia("(max-width: 1024px)").matches;
     if (isMobileDashboard) return rows.length > 0 ? [rows] : [];
-    const cardCount = Math.min(3, Math.max(1, Math.ceil(rows.length / rowsPerCard)));
+    const cardCount = Math.max(1, Math.ceil(rows.length / rowsPerCard));
     return Array.from({ length: cardCount }, (_, i) => rows.slice(i * rowsPerCard, (i + 1) * rowsPerCard)).filter(group => group.length > 0);
 }
 
-function DashboardRoute({ data, routeIndex }) {
+function DashboardRoute({ data, routeIndex, viewport }) {
     const activeRoutes = data.routes.filter(r => String(getSafeValue(r, "status")).toLowerCase() === "active");
     if (activeRoutes.length === 0) return <div className="fids-empty-msg">No Active Dispatched Routes Found.</div>;
     const currentRoute = activeRoutes[routeIndex % activeRoutes.length];
@@ -661,8 +838,10 @@ function DashboardRoute({ data, routeIndex }) {
     const isTextMode = scheduleType === "text" || customText !== "";
     const targetSchedules = data.schedules.filter(s => normalizeRouteId(getSafeValue(s, "routeid")) === currentRouteID && currentRouteID !== "");
     const headersList = getScheduleColumns(targetSchedules, data.company);
-    const gridTemplateColumns = getScheduleGridTemplate(headersList, true);
-    const rowGroups = splitRowsForDashboard(targetSchedules);
+    const gridTemplateColumns = getScheduleGridTemplate(headersList, true, targetSchedules, data.company);
+    const dashboardRowsPerCard = getDashboardRowsPerCard(headersList, targetSchedules, viewport?.height);
+    const scheduleLayoutVars = getScheduleLayoutVars(headersList, { mainDashboard: true, rowsPerCard: dashboardRowsPerCard, viewportHeight: viewport?.height });
+    const rowGroups = splitRowsForDashboard(targetSchedules, dashboardRowsPerCard);
     const cycleSeconds = getNumberSetting(data.company.cycleSeconds) || 15;
     const fare = getSafeValue(currentRoute, "fare");
 
@@ -686,15 +865,19 @@ function DashboardRoute({ data, routeIndex }) {
             ) : targetSchedules.length === 0 ? (
                 <div className="fids-empty-msg">No departures scheduled for this sector.</div>
             ) : (
-                <div className="dashboard-cards-grid" style={{ "--dashboard-card-count": rowGroups.length }}>
+                <div className="dashboard-cards-grid" style={{ "--dashboard-card-count": rowGroups.length, ...scheduleLayoutVars }}>
                     {rowGroups.map((group, groupIndex) => {
-                        const blankRows = Math.max(0, getDashboardRowsPerCard() - group.length);
+                        const fillerRows = Math.max(0, dashboardRowsPerCard - group.length);
                         return (
                             <div className="column-block dashboard-card-block" key={groupIndex}>
                                 <div className="single-fids-table-headings" style={{ gridTemplateColumns }}>{headersList.map(h => <span key={h}>{formatColumnLabel(h, data.company)}</span>)}</div>
-                                <div className="fids-adaptive-flow-container" style={{ "--dashboard-row-count": Math.max(group.length, getDashboardRowsPerCard()) }}>
+                                <div className="fids-adaptive-flow-container" style={{ "--dashboard-row-count": Math.max(dashboardRowsPerCard, group.length, 1) }}>
                                     {group.map((row, rowIndex) => <div key={rowIndex} className="single-fids-row" style={{ gridTemplateColumns }}>{headersList.map(h => <ScheduleCell key={h} header={h} value={getSafeValue(row, h, "-")} compact company={data.company} />)}</div>)}
-                                    {Array.from({ length: blankRows }, (_, i) => <div key={`blank-${i}`} className="single-fids-row single-fids-row-empty" style={{ gridTemplateColumns }} aria-hidden="true">{headersList.map(h => <span key={h}>&nbsp;</span>)}</div>)}
+                                    {Array.from({ length: fillerRows }, (_, i) => (
+                                        <div key={`filler-${i}`} className="single-fids-row single-fids-row-empty" style={{ gridTemplateColumns }} aria-hidden="true">
+                                            {headersList.map(h => <span key={h}>&nbsp;</span>)}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         );
@@ -717,7 +900,8 @@ function RoutesView({ data, selectedRoute, setSelectedRoute }) {
     const isTextMode = scheduleType === "text" || customText !== "";
     const targetSchedules = data.schedules.filter(s => normalizeRouteId(getSafeValue(s, "routeid")) === normalizeRouteId(matchedId));
     const headersList = getScheduleColumns(targetSchedules, data.company);
-    const colWidths = getScheduleGridTemplate(headersList);
+    const colWidths = getScheduleGridTemplate(headersList, false, targetSchedules, data.company);
+    const scheduleLayoutVars = getScheduleLayoutVars(headersList);
     const nextDepartureRow = isRouteActive ? getChronologicalNextDeparture(targetSchedules) : null;
     const nextTime = !isRouteActive ? "NOT ACTIVE" : isTextMode ? "INTERVAL" : nextDepartureRow ? formatTimeToHHMM(getSafeValue(nextDepartureRow, "departuretime") || getSafeValue(nextDepartureRow, "time")) : targetSchedules.length ? "SUSPENDED" : "--:--";
     const nextStatus = !isRouteActive ? routeStatus.toUpperCase() : isTextMode ? "OPERATING" : nextDepartureRow ? String(getSafeValue(nextDepartureRow, "route_status") || getSafeValue(nextDepartureRow, "status") || "-").toUpperCase() : targetSchedules.length ? "NO RUNS" : "-";
@@ -746,7 +930,7 @@ function RoutesView({ data, selectedRoute, setSelectedRoute }) {
                 </div>
             </div>
 
-            <div className={`schedule-workspace-board ${!isRouteActive ? "route-inactive" : ""}`} data-route-status={isRouteActive ? "" : routeStatus.toUpperCase()}>
+            <div className={`schedule-workspace-board ${!isRouteActive ? "route-inactive" : ""}`} data-route-status={isRouteActive ? "" : routeStatus.toUpperCase()} style={scheduleLayoutVars}>
                 <div className="workspace-header-hero">
                     <div className="workspace-meta-details"><h3>TRACKED OPERATIONS LINE</h3><h2 id="selectedRoute">{selected ? getSafeValue(selected, "route") : "Select a route segment..."}</h2></div>
                     <div className="workspace-header-actions">
@@ -759,7 +943,7 @@ function RoutesView({ data, selectedRoute, setSelectedRoute }) {
                 {isTextMode ? (
                     <div className="scrollable-content"><div style={{ padding: 40, textAlign: "center", display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}><div style={{ fontSize: 16, fontWeight: 800, color: "var(--time-color)", background: "var(--surface-accent)", padding: "25px 35px", borderRadius: 10, border: "1px solid var(--border)", width: "100%", maxWidth: 550, lineHeight: 1.6 }}>{customText || "Interval Operations Active For This Path Line."}</div></div></div>
                 ) : (
-                    <div className="scrollable-content"><div className="schedule-list">{!isRouteActive && <div className="inactive-route-notice">{routeStatus || "Not Active"} route. Schedule shown for reference.</div>}{targetSchedules.length === 0 ? <p className="empty-text" style={{ padding: 40, textAlign: "center", color: "var(--muted)", fontWeight: 600 }}>No timetables matched.</p> : targetSchedules.map((row, rowIndex) => <div key={rowIndex} className="schedule-row" style={{ display: "grid", gridTemplateColumns: colWidths, gap: 15, alignItems: "center", width: "100%" }}>{headersList.map(h => <div key={h}><ScheduleCell header={h} value={getSafeValue(row, h, "-")} company={data.company} /></div>)}</div>)}</div></div>
+                    <div className="scrollable-content"><div className="schedule-list">{!isRouteActive && <div className="inactive-route-notice">{routeStatus || "Not Active"} route. Schedule shown for reference.</div>}{targetSchedules.length === 0 ? <p className="empty-text" style={{ padding: 40, textAlign: "center", color: "var(--muted)", fontWeight: 600 }}>No timetables matched.</p> : targetSchedules.map((row, rowIndex) => <div key={rowIndex} className="schedule-row" style={{ display: "grid", gridTemplateColumns: colWidths, gap: "var(--schedule-row-gap, 15px)", alignItems: "center", width: "100%" }}>{headersList.map(h => <div key={h}><ScheduleCell header={h} value={getSafeValue(row, h, "-")} company={data.company} /></div>)}</div>)}</div></div>
                 )}
             </div>
         </div>
@@ -799,8 +983,35 @@ function ScheduleStatusPopup({ alerts, company }) {
     );
 }
 
+function SoundPermissionPrompt({ company, onDone }) {
+    async function enableSound() {
+        await unlockSchedulePopupSound(company);
+        setSoundPreference("enabled");
+        onDone();
+    }
+
+    function dismissSound() {
+        setSoundPreference("dismissed");
+        onDone();
+    }
+
+    return (
+        <div className="sound-permission-overlay" role="dialog" aria-modal="true" aria-labelledby="soundPermissionTitle">
+            <div className="sound-permission-card">
+                <div id="soundPermissionTitle" className="sound-permission-title">Enable Schedule Alerts?</div>
+                <div className="sound-permission-copy">Allow sound for schedule status popups on this device.</div>
+                <div className="sound-permission-actions">
+                    <button type="button" className="sound-permission-primary" onClick={enableSound}>Enable Sound</button>
+                    <button type="button" className="sound-permission-secondary" onClick={dismissSound}>Not Now</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function DashboardPage({ operatorCode }) {
     const clock = useClock();
+    const viewport = useViewportSize();
     const [data, setData] = useState(emptyData);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -812,6 +1023,7 @@ function DashboardPage({ operatorCode }) {
     const [lastSyncedAt, setLastSyncedAt] = useState(null);
     const [maintenanceMode, setMaintenanceMode] = useState(false);
     const [scheduleAlert, setScheduleAlert] = useState(null);
+    const [showSoundPrompt, setShowSoundPrompt] = useState(false);
     const previousScheduleStatusRef = useRef(null);
     const scheduleAlertTimerRef = useRef(null);
     const globalSettings = data.globalSettings || {};
@@ -826,6 +1038,9 @@ function DashboardPage({ operatorCode }) {
     useEffect(() => { document.body.className = viewMode === "selection" ? "selection-mode" : ""; }, [viewMode]);
     useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, [theme]);
     useEffect(() => { applyOperatorTheme(data.company.primaryColor); }, [data.company.primaryColor]);
+    useEffect(() => {
+        if (schedulePopupActive && getSoundPreference() === "") setShowSoundPrompt(true);
+    }, [schedulePopupActive]);
     useEffect(() => {
         if (!data.company.companyName) return;
         const title = `${data.company.companyName} Live Schedule | mySked`;
@@ -915,10 +1130,11 @@ function DashboardPage({ operatorCode }) {
             <Header company={data.company} viewMode={viewMode} setViewMode={setViewMode} toggleTheme={toggleTheme} clock={clock} />
             <Ticker data={data} />
             <main className="main-viewport-body">
-                <div id="dashboardView" className={`view-panel ${viewMode === "dashboard" ? "" : "hidden"}`}><DashboardRoute data={data} routeIndex={routeIndex} /></div>
+                <div id="dashboardView" className={`view-panel ${viewMode === "dashboard" ? "" : "hidden"}`}><DashboardRoute data={data} routeIndex={routeIndex} viewport={viewport} /></div>
                 <div id="selectionView" className={`view-panel ${viewMode === "selection" ? "" : "hidden"}`}><RoutesView data={data} selectedRoute={selectedRoute} setSelectedRoute={setSelectedRoute} /></div>
             </main>
             {viewMode === "dashboard" && schedulePopupActive && <ScheduleStatusPopup alerts={scheduleAlert} company={data.company} />}
+            {viewMode === "dashboard" && schedulePopupActive && showSoundPrompt && <SoundPermissionPrompt company={data.company} onDone={() => setShowSoundPrompt(false)} />}
             <Footer data={data} lastSyncedAt={lastSyncedAt} />
         </div>
     );

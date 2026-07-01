@@ -28,7 +28,7 @@ html[data-theme="light"] .fids-cycle-indicator-tag { background: #eef2f7; }
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--app-font); }
 
 body { background: var(--background); color: var(--text); height: 100vh; overflow: hidden; font-size: 14px; line-height: 1.5; }
-#app { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+#app { height: 100vh; display: flex; flex-direction: column; overflow: hidden; padding-bottom: 40px; }
 
 /* HEADER STYLING */
 #header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; height: 70px; flex-shrink: 0; }
@@ -128,18 +128,18 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
     border-right: 0;
 }
 
-.single-fids-table-headings { background: var(--surface-accent); border-bottom: 2px solid var(--grid-line); display: grid; padding: 10px 18px; gap: 12px; flex-shrink: 0; width: 100%; }
-.single-fids-table-headings span { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.single-fids-table-headings { background: var(--surface-accent); border-bottom: 2px solid var(--grid-line); display: grid; padding: 10px 18px; gap: var(--schedule-row-gap, 12px); flex-shrink: 0; width: 100%; }
+.single-fids-table-headings span { font-size: var(--schedule-heading-font-size, 11px); font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
-.fids-adaptive-flow-container { flex: 1; min-height: 0; overflow: hidden; width: 100%; display: grid; grid-template-rows: repeat(var(--dashboard-row-count, 10), minmax(0, 1fr)); }
-.single-fids-row { display: grid; min-height: 0; padding: 8px 18px; border-bottom: 1px solid var(--grid-line); gap: 12px; align-items: center; transition: background 0.15s ease; width: 100%; }
+.fids-adaptive-flow-container { flex: 1; min-height: 0; overflow: hidden; width: 100%; display: grid; grid-template-rows: repeat(var(--dashboard-row-count, 10), minmax(var(--schedule-row-min-height, 0), 1fr)); }
+.single-fids-row { display: grid; min-height: 0; height: 100%; padding: var(--schedule-row-padding-y, 8px) var(--schedule-row-padding-x, 18px); border-bottom: 1px solid var(--grid-line); gap: var(--schedule-row-gap, 12px); align-items: center; transition: background 0.15s ease; width: 100%; }
 .single-fids-row:hover { background: var(--surface-accent); }
 .single-fids-row:last-child { border-bottom: none; }
 .single-fids-row-empty { pointer-events: none; opacity: 0.75; }
 
 /* FIX 3: Clean text optimization rules matching unified corporate interface aesthetics */
-.single-fids-row span { font-size: clamp(14px, 1.25vw, 22px) !important; font-weight: 700 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; line-height: 1.15; }
-.single-fids-row strong { font-family: var(--app-font); }
+.single-fids-row span { font-size: var(--schedule-cell-font-size, clamp(14px, 1.05vw, 18px)) !important; font-weight: 700 !important; overflow: visible; text-overflow: clip; white-space: nowrap; min-width: 0; line-height: 1.15; }
+.single-fids-row strong { font-family: var(--app-font); font-size: var(--schedule-cell-font-size, clamp(14px, 1.05vw, 18px)) !important; font-weight: 700 !important; }
 .single-fids-row .time-col { color: var(--time-color) !important; font-weight: 700 !important; }
 .single-fids-row .text-col { color: var(--text-strong) !important; }
 
@@ -201,17 +201,17 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 #nextDepartureTime { font-size: 22px; font-weight: 900; color: var(--time-color); line-height: 1.1; }
 #nextDepartureStatus { font-size: 10px; font-weight: 800; letter-spacing: 0.5px; margin-top: 2px; text-transform: uppercase; }
 
-.timeline-title { background: var(--background); padding: 12px 24px; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; }
+.timeline-title { background: var(--background); padding: 12px var(--schedule-row-padding-x, 24px); font-size: var(--schedule-heading-font-size, 11px); font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: grid; grid-template-columns: 1fr 1fr; gap: var(--schedule-row-gap, 15px); width: 100%; }
 .timeline-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scrollable-content { flex: 1; overflow: visible; padding: 0; width: 100%; }
 .schedule-list { display: flex; flex-direction: column; gap: 0; width: 100%; }
 
 /* FIX 2: Card contents stretch to balance displaying grid columns across workspace width */
-.schedule-row { background: transparent; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 12px 24px; transition: background 0.15s ease; box-sizing: border-box; width: 100%; }
+.schedule-row { background: transparent; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: var(--schedule-row-padding-y, 12px) var(--schedule-row-padding-x, 24px); min-height: var(--schedule-row-min-height, 54px); transition: background 0.15s ease; box-sizing: border-box; width: 100%; }
 .schedule-row:hover { background: var(--surface-accent); }
 
-.schedule-row div { font-size: 14px !important; font-weight: 600 !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.schedule-row span, .schedule-row strong { font-family: var(--app-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; display: inline-block; }
+.schedule-row div { font-size: var(--schedule-cell-font-size, 14px) !important; font-weight: 600 !important; min-width: 0; overflow: visible; text-overflow: clip; white-space: nowrap; }
+.schedule-row span, .schedule-row strong { font-family: var(--app-font); font-size: var(--schedule-cell-font-size, 14px) !important; overflow: visible; text-overflow: clip; white-space: nowrap; max-width: 100%; display: inline-block; line-height: 1.15; }
 
 .details-btn { color: var(--muted); cursor: pointer; font-size: 16px; display: inline-block; line-height: 1; transition: color 0.15s ease; width: 24px; text-align: center; }
 .details-btn:hover { color: var(--primary); }
@@ -223,7 +223,7 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 .departed { color: var(--inactive) !important; }
 
 /* GLOBAL CONTROL UTILITY FOOTER */
-.footer-bar-container { background: var(--surface); border-top: 1px solid var(--border); padding: 10px 24px; height: 40px; display: flex; align-items: center; flex-shrink: 0; }
+.footer-bar-container { position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; background: var(--surface); border-top: 1px solid var(--border); padding: 10px 24px; height: 40px; display: flex; align-items: center; flex-shrink: 0; }
 
 .schedule-status-popup-overlay {
     position: fixed;
@@ -262,6 +262,37 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 .schedule-status-popup-details strong { font-size: clamp(16px, 2vw, 24px); font-weight: 900; text-transform: uppercase; letter-spacing: 0.4px; text-align: right; }
 .schedule-status-popup-remarks { margin-top: 8px; color: var(--muted); font-size: 13px; font-weight: 700; line-height: 1.35; }
 
+.sound-permission-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 130;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(3, 5, 10, 0.58);
+    backdrop-filter: blur(3px);
+    animation: popup-fade-in 0.18s ease-out;
+}
+.sound-permission-card {
+    width: min(420px, 100%);
+    background: var(--surface);
+    border: 1px solid var(--primary);
+    border-top: 5px solid var(--primary);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 24px;
+    color: var(--text);
+    text-align: center;
+    animation: popup-enter 0.2s ease-out;
+}
+.sound-permission-title { color: var(--text-strong); font-size: clamp(22px, 3vw, 30px); font-weight: 900; line-height: 1.08; margin-bottom: 8px; }
+.sound-permission-copy { color: var(--muted); font-size: 14px; font-weight: 700; line-height: 1.35; margin-bottom: 18px; }
+.sound-permission-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sound-permission-actions button { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-family: var(--app-font); font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.4px; cursor: pointer; }
+.sound-permission-primary { background: var(--primary); border-color: var(--primary) !important; color: #ffffff; }
+.sound-permission-secondary { background: var(--background); color: var(--text-strong); }
+
 @keyframes popup-fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -291,9 +322,51 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 .hidden { display: none !important; }
 .fids-empty-msg { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 40px; }
 
-@media (max-width: 768px) {
+@media (min-width: 1025px) {
+    html {
+        height: 100%;
+    }
+    body:not(.selection-mode) {
+        height: 100vh;
+        overflow: hidden;
+    }
+    body:not(.selection-mode) #app,
+    body:not(.selection-mode) #dashboardView,
+    body:not(.selection-mode) .single-fids-board {
+        height: 100%;
+        overflow: hidden;
+    }
+    body.selection-mode,
+    body.selection-mode #app {
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+    body.selection-mode .main-viewport-body {
+        overflow: visible;
+    }
+    body.selection-mode .selection-grid-layout {
+        height: auto;
+        min-height: 100%;
+    }
+    body.selection-mode .sidebar-panel-wrapper,
+    body.selection-mode .schedule-workspace-board {
+        min-height: 0;
+        max-height: none;
+    }
+    body.selection-mode .schedule-workspace-board {
+        overflow: visible;
+    }
+    body.selection-mode .scrollable-content {
+        overflow: visible;
+        min-height: 0;
+    }
+}
+
+@media (max-width: 1024px) {
     body { overflow-y: auto; height: auto; }
-    #app { height: auto; overflow: visible; }
+    #app { height: auto; overflow: visible; padding-bottom: 78px; }
     #header { flex-direction: column; height: auto; padding: 15px; gap: 15px; text-align: center; }
     .company { flex-direction: column; }
     .header-right { flex-direction: column; gap: 10px; width: 100%; }
@@ -309,7 +382,7 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
     .schedule-workspace-board { height: auto; }
 }
 
-@media (max-width: 768px) and (orientation: portrait) {
+@media (max-width: 1024px) {
     body {
         min-height: 100vh;
         height: auto;
@@ -320,16 +393,7 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
         min-height: 100vh;
         height: auto;
         overflow: visible;
-    }
-
-    body:not(.selection-mode) {
-        height: 100svh;
-        overflow: hidden;
-    }
-    body:not(.selection-mode) #app {
-        height: 100svh;
-        min-height: 0;
-        overflow: hidden;
+        padding-bottom: 78px;
     }
 
     #header {
@@ -401,20 +465,22 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
         padding: 8px;
         overflow: visible;
     }
-    body:not(.selection-mode) .main-viewport-body {
-        overflow: hidden;
-    }
+    body:not(.selection-mode) .main-viewport-body { overflow: visible; }
 
     #dashboardView,
     .single-fids-board {
         min-height: 0;
         height: auto;
+        overflow: visible;
+    }
+    #dashboardView {
+        overflow: visible !important;
     }
     body:not(.selection-mode) #dashboardView,
     body:not(.selection-mode) .single-fids-board {
-        height: 100%;
+        height: auto;
         min-height: 0;
-        overflow: hidden;
+        overflow: visible;
     }
 
     .single-fids-header {
@@ -473,11 +539,12 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 
     .dashboard-cards-grid {
         grid-template-columns: 1fr !important;
-        overflow: hidden;
+        overflow: visible;
     }
     .dashboard-card-block {
         border-right: 0;
         border-bottom: 0;
+        overflow: visible;
     }
     .dashboard-card-block:not(:first-child) { display: none; }
 
@@ -576,36 +643,38 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 
     .single-fids-table-headings,
     .single-fids-row {
-        padding-left: 12px;
-        padding-right: 12px;
-        gap: 8px;
+        padding-left: var(--schedule-row-padding-x, 12px);
+        padding-right: var(--schedule-row-padding-x, 12px);
+        gap: var(--schedule-row-gap, 8px);
     }
     .single-fids-row span {
-        font-size: clamp(13px, 4vw, 17px) !important;
+        font-size: var(--schedule-cell-font-size, clamp(13px, 4vw, 17px)) !important;
     }
     body:not(.selection-mode) .single-fids-table-headings {
-        padding: 6px 8px;
-        gap: 5px;
+        padding: 8px var(--schedule-row-padding-x, 12px);
+        gap: var(--schedule-row-gap, 8px);
     }
     body:not(.selection-mode) .single-fids-table-headings span {
-        font-size: 9px;
-        letter-spacing: 0.2px;
+        font-size: var(--schedule-heading-font-size, clamp(9px, 2.8vw, 11px));
+        letter-spacing: 0.3px;
     }
     body:not(.selection-mode) .single-fids-row {
-        padding: 2px 8px;
-        gap: 5px;
-        min-height: 0;
+        padding: var(--schedule-row-padding-y, 14px) var(--schedule-row-padding-x, 12px);
+        gap: var(--schedule-row-gap, 8px);
+        min-height: var(--schedule-row-min-height, clamp(56px, 13.8vw, 68px));
     }
-    body:not(.selection-mode) .single-fids-row span {
-        font-size: clamp(9px, 3vw, 13px) !important;
-        line-height: 1;
-    }
-    body:not(.selection-mode) .single-fids-row .time-col {
-        font-size: clamp(12px, 3.8vw, 16px) !important;
-    }
+    body:not(.selection-mode) .single-fids-row span,
+    body:not(.selection-mode) .single-fids-row .time-col,
     body:not(.selection-mode) .single-fids-row strong {
-        font-size: clamp(9px, 2.8vw, 12px) !important;
-        line-height: 1;
+        font-size: var(--schedule-cell-font-size, clamp(13px, 3.8vw, 17px)) !important;
+        line-height: 1.12;
+        overflow: visible;
+        text-overflow: clip;
+    }
+    body:not(.selection-mode) .column-block,
+    body:not(.selection-mode) .fids-adaptive-flow-container {
+        height: auto;
+        overflow: visible;
     }
     .schedule-status-popup {
         width: 100%;
@@ -622,33 +691,39 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
     .schedule-status-popup-details strong {
         font-size: 14px;
     }
+    .sound-permission-card {
+        padding: 20px 16px;
+    }
+    .sound-permission-actions {
+        grid-template-columns: 1fr;
+    }
     .timeline-title,
     .schedule-row {
-        padding-left: 7px;
-        padding-right: 7px;
-        gap: 5px !important;
+        padding-left: var(--schedule-row-padding-x, 7px);
+        padding-right: var(--schedule-row-padding-x, 7px);
+        gap: var(--schedule-row-gap, 5px) !important;
     }
     .timeline-title {
         padding-top: 6px;
         padding-bottom: 6px;
-        font-size: 8.5px;
+        font-size: var(--schedule-heading-font-size, 8.5px);
         letter-spacing: 0;
     }
     .schedule-row {
-        padding-top: 8px;
-        padding-bottom: 8px;
+        padding-top: var(--schedule-row-padding-y, 8px);
+        padding-bottom: var(--schedule-row-padding-y, 8px);
     }
     .schedule-row div {
-        font-size: clamp(10px, 3vw, 13px) !important;
+        font-size: var(--schedule-cell-font-size, clamp(10px, 3vw, 13px)) !important;
         line-height: 1.05;
     }
     .schedule-row span,
     .schedule-row strong {
-        font-size: clamp(9.5px, 2.7vw, 12px) !important;
+        font-size: var(--schedule-cell-font-size, clamp(9.5px, 2.7vw, 12px)) !important;
         line-height: 1.05;
     }
     .schedule-row .time-col {
-        font-size: clamp(11px, 3.4vw, 14px) !important;
+        font-size: var(--schedule-cell-font-size, clamp(9.5px, 2.7vw, 12px)) !important;
     }
     .footer-bar-container {
         height: auto;
