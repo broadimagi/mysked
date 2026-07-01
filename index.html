@@ -29,6 +29,55 @@
 </head>
 <body>
   <div id="react-root"></div>
-  <script type="module" src="/src/main.jsx"></script>
+  <div id="serve-warning" style="display:none;padding:20px;background:#2b2b2b;color:#fff;font-family:system-ui,Segoe UI,Roboto,'Open Sans',sans-serif;">
+    <h2 style="margin:0 0 8px 0">Development server required</h2>
+    <p style="margin:0 0 8px 0">You are opening the source HTML directly or the server is serving raw JSX files with an unsupported MIME type. Start the dev server or build the project and serve the <code>dist</code> directory.</p>
+    <pre style="background:#111;padding:10px;border-radius:6px;color:#9bdcff"># macOS (Homebrew)
+brew install node
+corepack enable
+corepack prepare pnpm@latest --activate
+pnpm install
+pnpm dev
+-- or --
+pnpm build
+python3 -m http.server --directory dist 3000</pre>
+  </div>
+
+  <script>
+    (function(){
+      var root = document.getElementById('react-root');
+      var warn = document.getElementById('serve-warning');
+
+      function showWarning(){
+        root.style.display = 'none';
+        warn.style.display = 'block';
+      }
+
+      if(location.protocol === 'file:'){
+        showWarning();
+        return;
+      }
+
+      // Check the server-provided MIME type for the JSX module before loading it
+      fetch('/src/main.jsx', { method: 'HEAD' }).then(function(res){
+        var ct = (res.headers.get('content-type') || '').toLowerCase();
+        if(ct.includes('javascript') || ct.includes('ecmascript') || ct.includes('application/wasm')){
+          var s = document.createElement('script');
+          s.type = 'module';
+          s.src = '/src/main.jsx';
+          document.body.appendChild(s);
+        } else {
+          showWarning();
+        }
+      }).catch(function(){
+        // If HEAD fails (some servers/filesystems), attempt to load and let the browser handle errors
+        var s = document.createElement('script');
+        s.type = 'module';
+        s.src = '/src/main.jsx';
+        s.onerror = showWarning;
+        document.body.appendChild(s);
+      });
+    })();
+  </script>
 </body>
 </html>
