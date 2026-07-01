@@ -446,14 +446,21 @@ function renderActiveDashboardRoute() {
     if (currentDashboardRouteIndex >= activeRoutes.length) currentDashboardRouteIndex = 0;
     const currentRoute = activeRoutes[currentDashboardRouteIndex];
     const currentRouteID = String(getSafeValue(currentRoute, "routeid") || getSafeValue(currentRoute, "routecode")).toLowerCase();
+    const fare = getSafeValue(currentRoute, "fare");
 
     let boardHTML = `
         <div class="single-fids-header">
             <div class="fids-main-title-info">
                 <span class="route-label-pill" style="background-color: var(--primary)">LIVE DASHBOARD</span>
-                <h2>${getSafeValue(currentRoute, "route")}</h2>
+                <div class="fids-route-title-stack">
+                    <h2>${escapeHTML(getSafeValue(currentRoute, "route"))}</h2>
+                    ${fare ? `<div class="fids-fare-tag fids-fare-tag-mobile">Fare ${escapeHTML(fare)}</div>` : ""}
+                </div>
             </div>
-            <div class="fids-cycle-indicator-tag">Cycling every ${appData.company.cycleSeconds}s</div>
+            <div class="fids-header-meta">
+                ${fare ? `<div class="fids-fare-tag fids-fare-tag-desktop">Fare ${escapeHTML(fare)}</div>` : ""}
+                <div class="fids-cycle-indicator-tag">Cycling every ${appData.company.cycleSeconds}s</div>
+            </div>
         </div>
     `;
 

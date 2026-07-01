@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const API_URL = "https://script.google.com/macros/s/AKfycby778WwSXHTuZcVC2iT4U3wkrn5pYOpXOuCVZQQ3Oo47cuLqbhyFpEm_6RRrgdcF9s/exec";
 const emptyData = { globalSettings: {}, company: {}, routes: [], schedules: [], advisories: [] };
@@ -102,6 +102,109 @@ function getNumberSetting(...values) {
     return matched === undefined ? null : Number(matched);
 }
 
+function isActiveSetting(value) {
+    return ["active", "enabled", "on", "true", "yes", "1"].includes(String(value || "").trim().toLowerCase());
+}
+
+function getScheduleIdentity(row) {
+    return [
+        normalizeRouteId(getSafeValue(row, "routeid") || getSafeValue(row, "route")),
+        normalizeColumnKey(getSafeValue(row, "departureTime")),
+        normalizeColumnKey(getSafeValue(row, "route") || getSafeValue(row, "routeName"))
+    ].join("|");
+}
+
+function getScheduleStatusSnapshot(schedules = []) {
+    const snapshot = new Map();
+    schedules.forEach(row => {
+        const key = getScheduleIdentity(row);
+        if (!key.replace(/\|/g, "")) return;
+        snapshot.set(key, {
+            status: String(getSafeValue(row, "scheduleStatus") || getSafeValue(row, "status") || "").trim(),
+            row
+        });
+    });
+    return snapshot;
+}
+
+function getRouteNameForSchedule(row, routes = []) {
+    const routeName = getSafeValue(row, "route") || getSafeValue(row, "routeName");
+    if (routeName) return routeName;
+    const rowRouteId = normalizeRouteId(getSafeValue(row, "routeid"));
+    const matchedRoute = routes.find(route => normalizeRouteId(getSafeValue(route, "routeid") || getSafeValue(route, "routecode")) === rowRouteId);
+    return matchedRoute ? getSafeValue(matchedRoute, "route") || getSafeValue(matchedRoute, "routeName") : "Schedule";
+}
+
+function findScheduleStatusChanges(previousSnapshot, nextData) {
+    if (!previousSnapshot) return [];
+    const nextSnapshot = getScheduleStatusSnapshot(nextData.schedules);
+    const changes = [];
+    for (const [key, nextItem] of nextSnapshot.entries()) {
+        const previousItem = previousSnapshot.get(key);
+        if (!previousItem) continue;
+        const previousStatus = normalizeColumnKey(previousItem.status);
+        const nextStatus = normalizeColumnKey(nextItem.status);
+        if (previousStatus && nextStatus && previousStatus !== nextStatus) {
+            changes.push({
+                routeName: getRouteNameForSchedule(nextItem.row, nextData.routes),
+                departureTime: formatTimeToHHMM(getSafeValue(nextItem.row, "departureTime")),
+                previousStatus: previousItem.status,
+                nextStatus: nextItem.status,
+                remarks: getSafeValue(nextItem.row, "remarks")
+            });
+        }
+    }
+    return changes;
+}
+
+function playFallbackPopupChime() {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    try {
+        const context = new AudioContext();
+        const now = context.currentTime;
+        const masterGain = context.createGain();
+        masterGain.gain.setValueAtTime(0.0001, now);
+        masterGain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+        masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
+        masterGain.connect(context.destination);
+
+        [740, 988].forEach((frequency, index) => {
+            const oscillator = context.createOscillator();
+            const gain = context.createGain();
+            const start = now + index * 0.16;
+            oscillator.type = "sine";
+            oscillator.frequency.setValueAtTime(frequency, start);
+            gain.gain.setValueAtTime(0.0001, start);
+            gain.gain.exponentialRampToValueAtTime(0.9, start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.28);
+            oscillator.connect(gain);
+            gain.connect(masterGain);
+            oscillator.start(start);
+            oscillator.stop(start + 0.32);
+        });
+
+        setTimeout(() => context.close().catch(() => {}), 900);
+    } catch (error) {
+        // Browsers may block audio until the user interacts with the page.
+    }
+}
+
+function playSchedulePopupSound(company = {}) {
+    const soundURL = getSettingValue(company, "schedulePopupSound", getSettingValue(company, "schedulePopupSoundURL", "/schedule-popup.mp3"));
+    if (!soundURL) {
+        playFallbackPopupChime();
+        return;
+    }
+    try {
+        const audio = new Audio(soundURL);
+        audio.volume = 0.9;
+        audio.play().catch(() => playFallbackPopupChime());
+    } catch (error) {
+        playFallbackPopupChime();
+    }
+}
+
 function resolveDisplayColumn(column, availableColumns) {
     const cleanColumn = normalizeColumnKey(column);
     const exactMatch = availableColumns.find(key => normalizeColumnKey(key) === cleanColumn);
@@ -180,6 +283,13 @@ function getScheduleGridTemplate(headersList, compact = false) {
             if (clean.endsWith("status")) return "minmax(88px, 0.8fr)";
             if (["remarks", "remark", "destination", "terminal", "notes", "note"].some(token => clean.includes(token))) return "minmax(120px, 1.2fr)";
             return "minmax(96px, 1fr)";
+        }
+        const isNarrow = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+        if (isNarrow) {
+            if (clean.includes("time")) return "minmax(62px, 0.8fr)";
+            if (clean.endsWith("status")) return "minmax(68px, 0.85fr)";
+            if (["remarks", "remark", "destination", "terminal", "notes", "note"].some(token => clean.includes(token))) return "minmax(78px, 1fr)";
+            return "minmax(54px, 1fr)";
         }
         if (clean.includes("time")) return "minmax(130px, 0.8fr)";
         if (clean.endsWith("status")) return "minmax(110px, 0.7fr)";
@@ -554,12 +664,22 @@ function DashboardRoute({ data, routeIndex }) {
     const gridTemplateColumns = getScheduleGridTemplate(headersList, true);
     const rowGroups = splitRowsForDashboard(targetSchedules);
     const cycleSeconds = getNumberSetting(data.company.cycleSeconds) || 15;
+    const fare = getSafeValue(currentRoute, "fare");
 
     return (
         <section className="single-fids-board">
             <div className="single-fids-header">
-                <div className="fids-main-title-info"><span className="route-label-pill" style={{ backgroundColor: "var(--primary)" }}>LIVE DASHBOARD</span><h2>{getSafeValue(currentRoute, "route")}</h2></div>
-                <div className="fids-cycle-indicator-tag">Cycling every {cycleSeconds}s</div>
+                <div className="fids-main-title-info">
+                    <span className="route-label-pill" style={{ backgroundColor: "var(--primary)" }}>LIVE DASHBOARD</span>
+                    <div className="fids-route-title-stack">
+                        <h2>{getSafeValue(currentRoute, "route")}</h2>
+                        {fare && <div className="fids-fare-tag fids-fare-tag-mobile"><span className="fids-fare-label">Fare</span><span className="fids-fare-value-main">{fare}</span></div>}
+                    </div>
+                </div>
+                <div className="fids-header-meta">
+                    {fare && <div className="fids-fare-tag fids-fare-tag-desktop"><span className="fids-fare-label">Fare</span><span className="fids-fare-value-main">{fare}</span></div>}
+                    <div className="fids-cycle-indicator-tag">Cycling every {cycleSeconds}s</div>
+                </div>
             </div>
             {isTextMode ? (
                 <div className="fids-text-schedule-panel"><div className="fids-text-schedule-message">{customText || "Interval Operations Active."}</div></div>
@@ -572,7 +692,7 @@ function DashboardRoute({ data, routeIndex }) {
                         return (
                             <div className="column-block dashboard-card-block" key={groupIndex}>
                                 <div className="single-fids-table-headings" style={{ gridTemplateColumns }}>{headersList.map(h => <span key={h}>{formatColumnLabel(h, data.company)}</span>)}</div>
-                                <div className="fids-adaptive-flow-container">
+                                <div className="fids-adaptive-flow-container" style={{ "--dashboard-row-count": Math.max(group.length, getDashboardRowsPerCard()) }}>
                                     {group.map((row, rowIndex) => <div key={rowIndex} className="single-fids-row" style={{ gridTemplateColumns }}>{headersList.map(h => <ScheduleCell key={h} header={h} value={getSafeValue(row, h, "-")} compact company={data.company} />)}</div>)}
                                     {Array.from({ length: blankRows }, (_, i) => <div key={`blank-${i}`} className="single-fids-row single-fids-row-empty" style={{ gridTemplateColumns }} aria-hidden="true">{headersList.map(h => <span key={h}>&nbsp;</span>)}</div>)}
                                 </div>
@@ -601,6 +721,7 @@ function RoutesView({ data, selectedRoute, setSelectedRoute }) {
     const nextDepartureRow = isRouteActive ? getChronologicalNextDeparture(targetSchedules) : null;
     const nextTime = !isRouteActive ? "NOT ACTIVE" : isTextMode ? "INTERVAL" : nextDepartureRow ? formatTimeToHHMM(getSafeValue(nextDepartureRow, "departuretime") || getSafeValue(nextDepartureRow, "time")) : targetSchedules.length ? "SUSPENDED" : "--:--";
     const nextStatus = !isRouteActive ? routeStatus.toUpperCase() : isTextMode ? "OPERATING" : nextDepartureRow ? String(getSafeValue(nextDepartureRow, "route_status") || getSafeValue(nextDepartureRow, "status") || "-").toUpperCase() : targetSchedules.length ? "NO RUNS" : "-";
+    const fare = selected ? getSafeValue(selected, "fare") : "";
 
     function chooseRoute(route) {
         setSelectedRoute(getSafeValue(route, "routeid") || getSafeValue(route, "routecode"));
@@ -628,7 +749,10 @@ function RoutesView({ data, selectedRoute, setSelectedRoute }) {
             <div className={`schedule-workspace-board ${!isRouteActive ? "route-inactive" : ""}`} data-route-status={isRouteActive ? "" : routeStatus.toUpperCase()}>
                 <div className="workspace-header-hero">
                     <div className="workspace-meta-details"><h3>TRACKED OPERATIONS LINE</h3><h2 id="selectedRoute">{selected ? getSafeValue(selected, "route") : "Select a route segment..."}</h2></div>
-                    <div id="nextDepartureCard"><div className="label">NEXT DEPARTURE</div><div id="nextDepartureTime">{nextTime || "--:--"}</div><div id="nextDepartureStatus" className={isRouteActive ? statusColorMapper(nextStatus, data.company) : "cancelled"}>{nextStatus}</div></div>
+                    <div className="workspace-header-actions">
+                        {fare && <div className="route-fare-card"><div className="label">FARE</div><div className="route-fare-value">{fare}</div></div>}
+                        <div id="nextDepartureCard"><div className="label">NEXT DEPARTURE</div><div id="nextDepartureTime">{nextTime || "--:--"}</div><div id="nextDepartureStatus" className={isRouteActive ? statusColorMapper(nextStatus, data.company) : "cancelled"}>{nextStatus}</div></div>
+                    </div>
                 </div>
 
                 {!isTextMode && targetSchedules.length > 0 && <div className="timeline-title" style={{ gridTemplateColumns: colWidths }}>{headersList.map(h => <span key={h}>{formatColumnLabel(h, data.company)}</span>)}</div>}
@@ -651,6 +775,30 @@ function Footer({ data, lastSyncedAt }) {
     return <footer className="footer-bar-container"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", fontSize: 12, color: "var(--muted)", fontWeight: 500 }}><div style={{ flex: 1, textAlign: "left" }}>Last Synced: <span style={{ color: "var(--text-strong)", fontWeight: 600 }}>{lastUpdatedStr}</span></div><div style={{ flex: 1, textAlign: "center", textTransform: "none", fontWeight: 500, color: "var(--text)" }}>{rawFooterText}</div><div style={{ flex: 1, textAlign: "right" }}><a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>{platformName} Powered by Broadimagi{platformVersion && <span className="platform-version"> {platformVersion}</span>}</a></div></div></footer>;
 }
 
+function ScheduleStatusPopup({ alerts, company }) {
+    if (!alerts || alerts.length === 0) return null;
+    return (
+        <div className="schedule-status-popup-overlay" role="status" aria-live="polite">
+            <div className="schedule-status-popup">
+                <div className="schedule-status-popup-title">Schedule Status Updated</div>
+                <div className="schedule-status-popup-subtitle">{alerts.length} schedule{alerts.length === 1 ? "" : "s"} changed</div>
+                <div className="schedule-status-popup-list">
+                    {alerts.map((alert, index) => (
+                        <div className="schedule-status-popup-item" key={`${alert.routeName}-${alert.departureTime}-${index}`}>
+                            <div className="schedule-status-popup-route">{alert.routeName}</div>
+                            <div className="schedule-status-popup-details">
+                                <span>{alert.departureTime || "--:--"}</span>
+                                <strong className={statusColorMapper(alert.nextStatus, company)}>{String(alert.nextStatus || "-").toUpperCase()}</strong>
+                            </div>
+                            {alert.remarks && <div className="schedule-status-popup-remarks">{alert.remarks}</div>}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function DashboardPage({ operatorCode }) {
     const clock = useClock();
     const [data, setData] = useState(emptyData);
@@ -663,6 +811,9 @@ function DashboardPage({ operatorCode }) {
     const [themeManuallySet, setThemeManuallySet] = useState(false);
     const [lastSyncedAt, setLastSyncedAt] = useState(null);
     const [maintenanceMode, setMaintenanceMode] = useState(false);
+    const [scheduleAlert, setScheduleAlert] = useState(null);
+    const previousScheduleStatusRef = useRef(null);
+    const scheduleAlertTimerRef = useRef(null);
     const globalSettings = data.globalSettings || {};
     const platformName = getPlatformName(globalSettings);
     const supportEmail = getSupportEmail(globalSettings);
@@ -670,6 +821,7 @@ function DashboardPage({ operatorCode }) {
     const maintenanceRefreshSeconds = getMaintenanceRefreshSeconds(globalSettings);
     const activeRefreshSeconds = maintenanceMode ? maintenanceRefreshSeconds : refreshSeconds;
     const cycleSeconds = getNumberSetting(data.company.cycleSeconds) || 15;
+    const schedulePopupActive = isActiveSetting(getSettingValue(data.company, "schedulePopup"));
 
     useEffect(() => { document.body.className = viewMode === "selection" ? "selection-mode" : ""; }, [viewMode]);
     useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, [theme]);
@@ -711,6 +863,14 @@ function DashboardPage({ operatorCode }) {
                     setLoading(false);
                     return;
                 }
+                const statusChanges = findScheduleStatusChanges(previousScheduleStatusRef.current, next);
+                previousScheduleStatusRef.current = getScheduleStatusSnapshot(next.schedules);
+                if (!isFirstLoad && isActiveSetting(getSettingValue(next.company, "schedulePopup")) && statusChanges.length > 0) {
+                    setScheduleAlert(statusChanges);
+                    playSchedulePopupSound(next.company);
+                    if (scheduleAlertTimerRef.current) clearTimeout(scheduleAlertTimerRef.current);
+                    scheduleAlertTimerRef.current = setTimeout(() => setScheduleAlert(null), 8000);
+                }
                 setData(next);
                 setError("");
                 setMaintenanceMode(false);
@@ -727,7 +887,11 @@ function DashboardPage({ operatorCode }) {
         }
         loadData(true);
         const master = setInterval(() => loadData(false), activeRefreshSeconds * 1000);
-        return () => { alive = false; clearInterval(master); };
+        return () => {
+            alive = false;
+            clearInterval(master);
+            if (scheduleAlertTimerRef.current) clearTimeout(scheduleAlertTimerRef.current);
+        };
     }, [operatorCode, activeRefreshSeconds]);
 
     useEffect(() => {
@@ -754,6 +918,7 @@ function DashboardPage({ operatorCode }) {
                 <div id="dashboardView" className={`view-panel ${viewMode === "dashboard" ? "" : "hidden"}`}><DashboardRoute data={data} routeIndex={routeIndex} /></div>
                 <div id="selectionView" className={`view-panel ${viewMode === "selection" ? "" : "hidden"}`}><RoutesView data={data} selectedRoute={selectedRoute} setSelectedRoute={setSelectedRoute} /></div>
             </main>
+            {viewMode === "dashboard" && schedulePopupActive && <ScheduleStatusPopup alerts={scheduleAlert} company={data.company} />}
             <Footer data={data} lastSyncedAt={lastSyncedAt} />
         </div>
     );

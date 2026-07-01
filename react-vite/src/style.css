@@ -87,7 +87,13 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 .single-fids-header { background: var(--surface-accent); border-bottom: 2px solid var(--grid-line); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
 .fids-main-title-info { display: flex; align-items: center; gap: 14px; }
 .route-label-pill { color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; }
+.fids-route-title-stack { min-width: 0; display: grid; gap: 4px; }
 .single-fids-header h2 { font-size: 22px; font-weight: 900; color: var(--text-strong); letter-spacing: 0; }
+.fids-header-meta { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; }
+.fids-fare-tag { display: inline-flex; align-items: center; gap: 8px; color: #ffffff; background: var(--primary); padding: 6px 12px; border-radius: 8px; border: 1px solid var(--primary); white-space: nowrap; box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18); }
+.fids-fare-label { font-size: 10px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.82; line-height: 1; }
+.fids-fare-value-main { font-size: 16px; font-weight: 900; color: #ffffff; line-height: 1; }
+.fids-fare-tag-mobile { display: none; }
 .fids-cycle-indicator-tag { font-size: 11px; font-weight: 700; color: var(--muted); background: var(--background); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); }
 
 .fids-single-column { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -125,7 +131,7 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 .single-fids-table-headings { background: var(--surface-accent); border-bottom: 2px solid var(--grid-line); display: grid; padding: 10px 18px; gap: 12px; flex-shrink: 0; width: 100%; }
 .single-fids-table-headings span { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
-.fids-adaptive-flow-container { flex: 1; min-height: 0; overflow: hidden; width: 100%; display: grid; grid-template-rows: repeat(10, minmax(0, 1fr)); }
+.fids-adaptive-flow-container { flex: 1; min-height: 0; overflow: hidden; width: 100%; display: grid; grid-template-rows: repeat(var(--dashboard-row-count, 10), minmax(0, 1fr)); }
 .single-fids-row { display: grid; min-height: 0; padding: 8px 18px; border-bottom: 1px solid var(--grid-line); gap: 12px; align-items: center; transition: background 0.15s ease; width: 100%; }
 .single-fids-row:hover { background: var(--surface-accent); }
 .single-fids-row:last-child { border-bottom: none; }
@@ -143,16 +149,18 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 
 .selection-grid-layout { 
     display: grid; 
-    grid-template-columns: 320px 1fr; 
+    grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); 
     gap: 20px; 
     align-items: start;
     min-height: 100%;
+    width: 100%;
+    max-width: none;
     overflow: visible; 
 }
 
 /* SIDEBAR CHIPS TRACKS */
-.sidebar-panel-wrapper { display: flex; flex-direction: column; gap: 20px; height: auto; min-height: 100%; }
-.routes-card-box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px; display: flex; flex-direction: column; overflow: visible; box-shadow: var(--shadow); }
+.sidebar-panel-wrapper { display: flex; flex-direction: column; gap: 20px; height: auto; min-height: 100%; min-width: 0; width: 100%; max-width: none; }
+.routes-card-box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px; display: flex; flex-direction: column; overflow: visible; box-shadow: var(--shadow); min-width: 0; width: 100%; max-width: none; }
 .sidebar-panel-wrapper .routes-card-box:first-child { flex: 0 0 auto; }
 .sidebar-panel-wrapper .routes-card-box:last-child { height: auto; flex-shrink: 0; }
 
@@ -171,7 +179,7 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 .inactive-route-chip-static { cursor: default; justify-content: flex-start; }
 
 /* SCHEDULE CONFIGURATOR WORKSPACE */
-.schedule-workspace-board { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; overflow: visible; box-shadow: var(--shadow); height: auto; flex: 1; }
+.schedule-workspace-board { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; overflow: visible; box-shadow: var(--shadow); height: auto; flex: 1; min-width: 0; width: 100%; max-width: none; }
 .schedule-workspace-board.route-inactive { position: relative; border-color: rgba(220, 38, 38, 0.55); }
 .schedule-workspace-board.route-inactive::after { content: attr(data-route-status); position: absolute; inset: 72px 0 0; display: flex; align-items: center; justify-content: center; color: rgba(220, 38, 38, 0.10); font-size: clamp(56px, 10vw, 140px); font-weight: 900; letter-spacing: 0; pointer-events: none; z-index: 0; }
 .schedule-workspace-board.route-inactive .workspace-header-hero,
@@ -184,12 +192,17 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 .workspace-meta-details h3 { font-size: 10px; font-weight: 900; color: var(--primary); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px; }
 .workspace-meta-details h2 { font-size: 20px; font-weight: 900; color: var(--text-strong); letter-spacing: 0; margin-bottom: 2px; }
 
+.workspace-header-actions { display: flex; align-items: stretch; justify-content: flex-end; gap: 10px; flex-shrink: 0; }
+.route-fare-card { background: var(--background); border: 1px solid var(--border); padding: 12px 16px; border-radius: 10px; text-align: right; min-width: 92px; flex-shrink: 0; }
+.route-fare-card .label { font-size: 9px; font-weight: 800; color: var(--muted); letter-spacing: 0.5px; margin-bottom: 2px; }
+.route-fare-value { font-size: 20px; font-weight: 900; color: var(--time-color); line-height: 1.1; white-space: nowrap; }
 #nextDepartureCard { background: var(--background); border: 1px solid var(--border); padding: 12px 20px; border-radius: 10px; text-align: right; min-width: auto; flex-shrink: 0; }
 #nextDepartureCard .label { font-size: 9px; font-weight: 800; color: var(--muted); letter-spacing: 0.5px; margin-bottom: 2px; }
 #nextDepartureTime { font-size: 22px; font-weight: 900; color: var(--time-color); line-height: 1.1; }
 #nextDepartureStatus { font-size: 10px; font-weight: 800; letter-spacing: 0.5px; margin-top: 2px; text-transform: uppercase; }
 
 .timeline-title { background: var(--background); padding: 12px 24px; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; }
+.timeline-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scrollable-content { flex: 1; overflow: visible; padding: 0; width: 100%; }
 .schedule-list { display: flex; flex-direction: column; gap: 0; width: 100%; }
 
@@ -198,7 +211,7 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 .schedule-row:hover { background: var(--surface-accent); }
 
 .schedule-row div { font-size: 14px !important; font-weight: 600 !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.schedule-row span, .schedule-row strong { font-family: var(--app-font); }
+.schedule-row span, .schedule-row strong { font-family: var(--app-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; display: inline-block; }
 
 .details-btn { color: var(--muted); cursor: pointer; font-size: 16px; display: inline-block; line-height: 1; transition: color 0.15s ease; width: 24px; text-align: center; }
 .details-btn:hover { color: var(--primary); }
@@ -211,6 +224,52 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
 
 /* GLOBAL CONTROL UTILITY FOOTER */
 .footer-bar-container { background: var(--surface); border-top: 1px solid var(--border); padding: 10px 24px; height: 40px; display: flex; align-items: center; flex-shrink: 0; }
+
+.schedule-status-popup-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(3, 5, 10, 0.72);
+    backdrop-filter: blur(4px);
+    animation: popup-fade-in 0.18s ease-out;
+}
+.schedule-status-popup {
+    width: min(620px, 100%);
+    max-height: min(680px, calc(100vh - 48px));
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--primary);
+    border-top: 6px solid var(--primary);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 24px;
+    color: var(--text);
+    animation: popup-enter 0.2s ease-out;
+    display: flex;
+    flex-direction: column;
+}
+.schedule-status-popup-title { font-size: clamp(22px, 3vw, 34px); font-weight: 900; color: var(--text-strong); text-align: center; line-height: 1.05; margin-bottom: 6px; }
+.schedule-status-popup-subtitle { color: var(--primary); font-size: 12px; font-weight: 900; text-transform: uppercase; text-align: center; letter-spacing: 0.7px; margin-bottom: 18px; }
+.schedule-status-popup-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding-right: 2px; }
+.schedule-status-popup-item { background: var(--background); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.schedule-status-popup-route { color: var(--text-strong); font-size: clamp(15px, 2vw, 20px); font-weight: 900; line-height: 1.15; margin-bottom: 10px; }
+.schedule-status-popup-details { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.schedule-status-popup-details span { color: var(--time-color); font-size: clamp(22px, 3vw, 34px); font-weight: 900; line-height: 1; }
+.schedule-status-popup-details strong { font-size: clamp(16px, 2vw, 24px); font-weight: 900; text-transform: uppercase; letter-spacing: 0.4px; text-align: right; }
+.schedule-status-popup-remarks { margin-top: 8px; color: var(--muted); font-size: 13px; font-weight: 700; line-height: 1.35; }
+
+@keyframes popup-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes popup-enter {
+    from { opacity: 0; transform: scale(0.96) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
 
 /* DATA DIALOG MODAL BASE OVERLAYS */
 #modalOverlay { position: fixed; inset: 0; background: rgba(3,5,10,0.85); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; z-index: 2000; transition: all 0.2s ease; }
@@ -244,9 +303,9 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
     .dashboard-cards-grid { grid-template-columns: 1fr !important; }
     .dashboard-card-block { border-right: 0; border-bottom: 1px solid var(--border); }
     .fids-columns-grid .column-block:first-child { border-right: none; border-bottom: 1px solid var(--border); }
-    .selection-grid-layout { grid-template-columns: 1fr; height: auto !important; }
-    .sidebar-panel-wrapper { height: auto; }
-    .sidebar-panel-wrapper .routes-card-box:first-child { height: 300px; }
+    .selection-grid-layout { grid-template-columns: minmax(0, 1fr); height: auto !important; width: 100%; max-width: none; }
+    .sidebar-panel-wrapper { height: auto; width: 100%; max-width: none; }
+    .sidebar-panel-wrapper .routes-card-box:first-child { height: auto; }
     .schedule-workspace-board { height: auto; }
 }
 
@@ -261,6 +320,16 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
         min-height: 100vh;
         height: auto;
         overflow: visible;
+    }
+
+    body:not(.selection-mode) {
+        height: 100svh;
+        overflow: hidden;
+    }
+    body:not(.selection-mode) #app {
+        height: 100svh;
+        min-height: 0;
+        overflow: hidden;
     }
 
     #header {
@@ -332,11 +401,20 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
         padding: 8px;
         overflow: visible;
     }
+    body:not(.selection-mode) .main-viewport-body {
+        overflow: hidden;
+    }
 
     #dashboardView,
     .single-fids-board {
         min-height: 0;
         height: auto;
+    }
+    body:not(.selection-mode) #dashboardView,
+    body:not(.selection-mode) .single-fids-board {
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
     }
 
     .single-fids-header {
@@ -344,18 +422,53 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
         justify-content: center;
         text-align: center;
     }
+    body:not(.selection-mode) .single-fids-header {
+        padding: 7px 10px;
+    }
     .fids-main-title-info {
         width: 100%;
         justify-content: center;
         min-width: 0;
+        display: flex;
     }
     .route-label-pill,
+    .fids-header-meta,
+    .fids-fare-tag-desktop,
     .fids-cycle-indicator-tag { display: none; }
+    .fids-route-title-stack {
+        width: 100%;
+        justify-items: center;
+        gap: 6px;
+    }
+    .fids-fare-tag-mobile {
+        display: inline-flex;
+        width: fit-content;
+        max-width: 100%;
+        white-space: normal;
+        justify-content: center;
+    }
+    body:not(.selection-mode) .fids-route-title-stack {
+        gap: 4px;
+    }
+    body:not(.selection-mode) .fids-fare-tag-mobile {
+        padding: 3px 8px;
+        gap: 6px;
+    }
+    body:not(.selection-mode) .fids-fare-tag-mobile .fids-fare-label {
+        font-size: 8px;
+    }
+    body:not(.selection-mode) .fids-fare-tag-mobile .fids-fare-value-main {
+        font-size: clamp(12px, 3.6vw, 15px);
+    }
     .single-fids-header h2 {
         font-size: clamp(17px, 5vw, 22px);
         line-height: 1.18;
         text-align: center;
         overflow-wrap: anywhere;
+    }
+    body:not(.selection-mode) .single-fids-header h2 {
+        font-size: clamp(15px, 4.8vw, 20px);
+        line-height: 1.08;
     }
 
     .dashboard-cards-grid {
@@ -373,6 +486,9 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
         flex-direction: column;
         gap: 12px;
         min-height: 0;
+        width: 100%;
+        max-width: none;
+        align-items: stretch;
         overflow: visible;
     }
     .sidebar-panel-wrapper {
@@ -381,13 +497,76 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
     .sidebar-panel-wrapper .routes-card-box:first-child {
         order: 1;
         height: auto;
+        width: 100%;
+        max-width: none;
     }
     .schedule-workspace-board {
         order: 2;
         height: auto;
+        width: 100%;
+        max-width: none;
+    }
+    .workspace-header-hero {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        padding: 10px 12px;
+        text-align: center;
+    }
+    .workspace-meta-details {
+        width: 100%;
+    }
+    .workspace-meta-details h3 {
+        font-size: 9px;
+        margin-bottom: 3px;
+    }
+    .workspace-meta-details h2 {
+        font-size: clamp(16px, 4.4vw, 20px);
+        line-height: 1.15;
+        overflow-wrap: anywhere;
+    }
+    .workspace-header-actions {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 6px;
+        align-items: stretch;
+    }
+    .route-fare-card,
+    #nextDepartureCard {
+        min-width: 0;
+        text-align: center;
+        padding: 6px 8px;
+        border-radius: 8px;
+    }
+    .route-fare-card {
+        width: 100%;
+        min-width: 0;
+    }
+    #nextDepartureCard {
+        width: 100%;
+    }
+    .route-fare-card:only-child,
+    #nextDepartureCard:only-child {
+        grid-column: 1 / -1;
+    }
+    .route-fare-card .label,
+    #nextDepartureCard .label {
+        font-size: 8px;
+        margin-bottom: 1px;
+    }
+    .route-fare-value,
+    #nextDepartureTime {
+        font-size: clamp(13px, 3.7vw, 17px);
+    }
+    #nextDepartureStatus {
+        font-size: 8px;
+        margin-top: 1px;
     }
     .sidebar-panel-wrapper .routes-card-box:last-child {
         order: 3;
+        width: 100%;
+        max-width: none;
     }
     .routes-card-box,
     .scroll-chips-track,
@@ -404,7 +583,73 @@ body.selection-mode .main-viewport-body { overflow-y: auto; }
     .single-fids-row span {
         font-size: clamp(13px, 4vw, 17px) !important;
     }
-
+    body:not(.selection-mode) .single-fids-table-headings {
+        padding: 6px 8px;
+        gap: 5px;
+    }
+    body:not(.selection-mode) .single-fids-table-headings span {
+        font-size: 9px;
+        letter-spacing: 0.2px;
+    }
+    body:not(.selection-mode) .single-fids-row {
+        padding: 2px 8px;
+        gap: 5px;
+        min-height: 0;
+    }
+    body:not(.selection-mode) .single-fids-row span {
+        font-size: clamp(9px, 3vw, 13px) !important;
+        line-height: 1;
+    }
+    body:not(.selection-mode) .single-fids-row .time-col {
+        font-size: clamp(12px, 3.8vw, 16px) !important;
+    }
+    body:not(.selection-mode) .single-fids-row strong {
+        font-size: clamp(9px, 2.8vw, 12px) !important;
+        line-height: 1;
+    }
+    .schedule-status-popup {
+        width: 100%;
+        max-height: calc(100svh - 32px);
+        padding: 18px 14px;
+    }
+    .schedule-status-popup-route {
+        font-size: 14px;
+        margin-bottom: 7px;
+    }
+    .schedule-status-popup-details span {
+        font-size: 20px;
+    }
+    .schedule-status-popup-details strong {
+        font-size: 14px;
+    }
+    .timeline-title,
+    .schedule-row {
+        padding-left: 7px;
+        padding-right: 7px;
+        gap: 5px !important;
+    }
+    .timeline-title {
+        padding-top: 6px;
+        padding-bottom: 6px;
+        font-size: 8.5px;
+        letter-spacing: 0;
+    }
+    .schedule-row {
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+    .schedule-row div {
+        font-size: clamp(10px, 3vw, 13px) !important;
+        line-height: 1.05;
+    }
+    .schedule-row span,
+    .schedule-row strong {
+        font-size: clamp(9.5px, 2.7vw, 12px) !important;
+        line-height: 1.05;
+    }
+    .schedule-row .time-col {
+        font-size: clamp(11px, 3.4vw, 14px) !important;
+    }
     .footer-bar-container {
         height: auto;
         min-height: 0;

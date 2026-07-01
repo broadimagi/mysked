@@ -116,6 +116,8 @@ function buildCompanySettings(row, labelSettings) {
     themeMode: getField(row, "themeMode") || "dark",
     refreshSeconds: toNumber(getField(row, "refreshSeconds"), 60),
     cycleSeconds: toNumber(getField(row, "cycleSeconds"), 15),
+    schedulePopup: getField(row, "schedulePopup") || "",
+    schedulePopupSound: getField(row, "schedulePopupSound") || "",
     footerText: getField(row, "footerText") || "",
     displayColumns: splitList(getField(row, "displayColumns")),
     labelSettings,
