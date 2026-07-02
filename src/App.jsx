@@ -52,6 +52,68 @@ function getPlatformVersion(globalSettings = {}) {
     return getSettingValue(globalSettings, "PlatformVersion", "");
 }
 
+function splitTrailingPunctuation(value = "") {
+    const match = String(value).match(/^(.+?)([.,;:!?)]*)$/);
+    return match ? { main: match[1], trailing: match[2] } : { main: value, trailing: "" };
+}
+
+function getFooterLinkData(token = "") {
+    const markdownMatch = String(token).match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
+    const label = markdownMatch ? markdownMatch[1] : token;
+    const rawTarget = markdownMatch ? markdownMatch[2] : token;
+    const { main, trailing } = splitTrailingPunctuation(rawTarget);
+    const cleanTarget = main.trim();
+    const lowerTarget = cleanTarget.toLowerCase();
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanTarget);
+    const phoneDigits = cleanTarget.replace(/[^\d]/g, "");
+    const isPhone = phoneDigits.length >= 7 && /^\+?[\d\s().-]+$/.test(cleanTarget);
+
+    if (lowerTarget.startsWith("http://") || lowerTarget.startsWith("https://")) {
+        return { label, href: cleanTarget, trailing, external: true };
+    }
+    if (lowerTarget.startsWith("www.")) {
+        return { label, href: `https://${cleanTarget}`, trailing, external: true };
+    }
+    if (lowerTarget.startsWith("mailto:") || lowerTarget.startsWith("tel:")) {
+        return { label, href: cleanTarget, trailing, external: false };
+    }
+    if (isEmail) {
+        return { label, href: `mailto:${cleanTarget}`, trailing, external: false };
+    }
+    if (isPhone) {
+        const telValue = `${cleanTarget.trim().startsWith("+") ? "+" : ""}${phoneDigits}`;
+        return { label, href: `tel:${telValue}`, trailing, external: false };
+    }
+    return null;
+}
+
+function renderFooterRichText(value = "") {
+    const text = String(value || "mySked DB");
+    const tokenPattern = /(\[[^\]]+\]\((?:https?:\/\/|mailto:|tel:|www\.)[^)\s]+\)|https?:\/\/[^\s<]+|www\.[^\s<]+|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\+?\d[\d\s().-]{6,}\d)/gi;
+    const parts = [];
+    let lastIndex = 0;
+
+    text.replace(tokenPattern, (match, _token, index) => {
+        if (index > lastIndex) parts.push(text.slice(lastIndex, index));
+        const linkData = getFooterLinkData(match);
+        if (linkData) {
+            parts.push(
+                <React.Fragment key={`${index}-${match}`}>
+                    <a className="footer-inline-link" href={linkData.href} target={linkData.external ? "_blank" : undefined} rel={linkData.external ? "noopener noreferrer" : undefined}>{linkData.label}</a>
+                    {linkData.trailing}
+                </React.Fragment>
+            );
+        } else {
+            parts.push(match);
+        }
+        lastIndex = index + match.length;
+        return match;
+    });
+
+    if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+    return parts.length > 0 ? parts : text;
+}
+
 function getMaintenanceRefreshSeconds(globalSettings = {}) {
     return getNumberSetting(
         getSettingValue(globalSettings, "MaintenanceRefresh"),
@@ -227,6 +289,14 @@ function setSoundPreference(value) {
 async function unlockSchedulePopupSound(company = {}) {
     window.__myskedScheduleSoundUnlocked = true;
 
+    if (navigator.permissions && navigator.permissions.query) {
+        try {
+            await navigator.permissions.query({ name: "speaker-selection" });
+        } catch (error) {
+            // Most browsers do not expose a sound-output permission; the user click below is enough.
+        }
+    }
+
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (AudioContext) {
         try {
@@ -370,30 +440,39 @@ function getColumnWeight(header, rows = [], compact = false, company = {}) {
     return Math.max(minimum, Math.min(maximum, Number(weight.toFixed(2))));
 }
 
-function getScheduleGridTemplate(headersList, compact = false, rows = [], company = {}) {
-    return headersList.map(header => {
-        const clean = normalizeColumnKey(header);
-        const isNarrow = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 1024px)").matches;
-        const weight = getColumnWeight(header, rows, compact, company);
-        const narrowBoost = isNarrow && clean.endsWith("status") ? 0.18 : 0;
-        return `minmax(0, ${(weight + narrowBoost).toFixed(2)}fr)`;
-    }).join(" ");
+function getScheduleGridTemplate(headersList) {
+    return `repeat(${Math.max(1, headersList.length)}, minmax(0, 1fr))`;
+}
+
+function getScheduleContentMetrics(headersList = [], rows = [], company = {}) {
+    const lengths = headersList.flatMap(header => {
+        const labelLength = formatColumnLabel(header, company).length;
+        const valueLengths = rows.map(row => getColumnDisplayValue(header, row).length);
+        return [labelLength, ...valueLengths];
+    });
+    return {
+        longest: Math.max(1, ...lengths),
+        columnCount: Math.max(1, headersList.length),
+        rowCount: Math.max(1, rows.length)
+    };
 }
 
 function getScheduleLayoutVars(headersList, options = {}) {
     const columnCount = Math.max(1, headersList.length);
     const isNarrow = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 1024px)").matches;
     const isMainDashboard = Boolean(options.mainDashboard);
+    const longestContent = Math.max(1, options.longestContent || 1);
+    const crowdedColumns = Math.max(0, columnCount - 4);
+    const crowdedContent = Math.max(0, longestContent - 12);
 
     if (isNarrow) {
-        const fontSize = columnCount <= 3
-            ? (isMainDashboard ? "clamp(14px, 3.4vw, 18px)" : "clamp(13px, 3vw, 17px)")
-            : columnCount === 4
-                ? (isMainDashboard ? "clamp(11.5px, 2.55vw, 16px)" : "clamp(10.5px, 2.25vw, 15px)")
-                : (isMainDashboard ? "clamp(9.5px, 2vw, 13.5px)" : "clamp(9px, 1.75vw, 12.5px)");
+        const minFont = columnCount >= 7 || longestContent >= 22 ? 9 : columnCount >= 5 || longestContent >= 16 ? 10 : 12;
+        const maxFont = columnCount >= 7 || longestContent >= 22 ? 12 : columnCount >= 5 || longestContent >= 16 ? 14 : 17;
+        const vwSize = Math.max(2.2, Math.min(3.8, 4.2 - crowdedColumns * 0.32 - crowdedContent * 0.06));
+        const fontSize = `clamp(${minFont}px, ${vwSize.toFixed(2)}vw, ${maxFont}px)`;
         return {
             "--schedule-cell-font-size": fontSize,
-            "--schedule-heading-font-size": columnCount <= 4 ? "clamp(8px, 1.8vw, 11px)" : "clamp(7px, 1.45vw, 9.5px)",
+            "--schedule-heading-font-size": fontSize,
             "--schedule-row-min-height": columnCount <= 4
                 ? (isMainDashboard ? "clamp(52px, 10vw, 66px)" : "clamp(44px, 8vw, 58px)")
                 : (isMainDashboard ? "clamp(46px, 8.5vw, 58px)" : "clamp(38px, 7vw, 50px)"),
@@ -409,11 +488,13 @@ function getScheduleLayoutVars(headersList, options = {}) {
         const availableHeight = Math.max(380, viewportHeight - reservedHeight);
         const rowHeight = Math.max(42, Math.min(68, Math.floor(availableHeight / options.rowsPerCard)));
         const fontScale = columnCount <= 3 ? 0.36 : columnCount === 4 ? 0.32 : columnCount <= 6 ? 0.27 : 0.23;
-        const fontSize = Math.max(columnCount <= 4 ? 12 : 10, Math.min(columnCount <= 4 ? 22 : 16, Math.floor(rowHeight * fontScale)));
+        const contentPenalty = Math.min(4, Math.floor(crowdedContent / 5));
+        const columnPenalty = Math.min(3, Math.floor(crowdedColumns / 2));
+        const fontSize = Math.max(columnCount <= 4 ? 12 : 9, Math.min(columnCount <= 4 ? 22 : 16, Math.floor(rowHeight * fontScale) - contentPenalty - columnPenalty));
         const paddingY = Math.max(6, Math.floor((rowHeight - fontSize * 1.15) / 2));
         return {
             "--schedule-cell-font-size": `${fontSize}px`,
-            "--schedule-heading-font-size": columnCount <= 4 ? "11px" : "10px",
+            "--schedule-heading-font-size": `${fontSize}px`,
             "--schedule-row-min-height": `${rowHeight}px`,
             "--schedule-row-padding-y": `${paddingY}px`,
             "--schedule-row-padding-x": columnCount <= 4 ? "24px" : "16px",
@@ -421,16 +502,13 @@ function getScheduleLayoutVars(headersList, options = {}) {
         };
     }
 
-    const fontSize = columnCount <= 3
-        ? "clamp(15px, 1.05vw, 18px)"
-        : columnCount === 4
-            ? "clamp(13px, 0.9vw, 16px)"
-            : columnCount <= 6
-                ? "clamp(11px, 0.78vw, 14px)"
-                : "clamp(10px, 0.65vw, 12px)";
+    const desktopMin = columnCount >= 7 || longestContent >= 22 ? 9 : columnCount >= 5 || longestContent >= 16 ? 10 : 12;
+    const desktopMax = columnCount >= 7 || longestContent >= 22 ? 12 : columnCount >= 5 || longestContent >= 16 ? 14 : 18;
+    const desktopVw = Math.max(0.62, Math.min(1.05, 1.12 - crowdedColumns * 0.07 - crowdedContent * 0.012));
+    const fontSize = `clamp(${desktopMin}px, ${desktopVw.toFixed(2)}vw, ${desktopMax}px)`;
     return {
         "--schedule-cell-font-size": fontSize,
-        "--schedule-heading-font-size": columnCount <= 4 ? "11px" : "10px",
+        "--schedule-heading-font-size": fontSize,
         "--schedule-row-min-height": columnCount <= 4 ? "42px" : "38px",
         "--schedule-row-padding-y": columnCount <= 4 ? "8px" : "7px",
         "--schedule-row-padding-x": columnCount <= 4 ? "24px" : "16px",
@@ -838,9 +916,10 @@ function DashboardRoute({ data, routeIndex, viewport }) {
     const isTextMode = scheduleType === "text" || customText !== "";
     const targetSchedules = data.schedules.filter(s => normalizeRouteId(getSafeValue(s, "routeid")) === currentRouteID && currentRouteID !== "");
     const headersList = getScheduleColumns(targetSchedules, data.company);
-    const gridTemplateColumns = getScheduleGridTemplate(headersList, true, targetSchedules, data.company);
+    const gridTemplateColumns = getScheduleGridTemplate(headersList);
     const dashboardRowsPerCard = getDashboardRowsPerCard(headersList, targetSchedules, viewport?.height);
-    const scheduleLayoutVars = getScheduleLayoutVars(headersList, { mainDashboard: true, rowsPerCard: dashboardRowsPerCard, viewportHeight: viewport?.height });
+    const contentMetrics = getScheduleContentMetrics(headersList, targetSchedules, data.company);
+    const scheduleLayoutVars = getScheduleLayoutVars(headersList, { mainDashboard: true, rowsPerCard: dashboardRowsPerCard, viewportHeight: viewport?.height, longestContent: contentMetrics.longest });
     const rowGroups = splitRowsForDashboard(targetSchedules, dashboardRowsPerCard);
     const cycleSeconds = getNumberSetting(data.company.cycleSeconds) || 15;
     const fare = getSafeValue(currentRoute, "fare");
@@ -900,8 +979,9 @@ function RoutesView({ data, selectedRoute, setSelectedRoute }) {
     const isTextMode = scheduleType === "text" || customText !== "";
     const targetSchedules = data.schedules.filter(s => normalizeRouteId(getSafeValue(s, "routeid")) === normalizeRouteId(matchedId));
     const headersList = getScheduleColumns(targetSchedules, data.company);
-    const colWidths = getScheduleGridTemplate(headersList, false, targetSchedules, data.company);
-    const scheduleLayoutVars = getScheduleLayoutVars(headersList);
+    const colWidths = getScheduleGridTemplate(headersList);
+    const contentMetrics = getScheduleContentMetrics(headersList, targetSchedules, data.company);
+    const scheduleLayoutVars = getScheduleLayoutVars(headersList, { longestContent: contentMetrics.longest });
     const nextDepartureRow = isRouteActive ? getChronologicalNextDeparture(targetSchedules) : null;
     const nextTime = !isRouteActive ? "NOT ACTIVE" : isTextMode ? "INTERVAL" : nextDepartureRow ? formatTimeToHHMM(getSafeValue(nextDepartureRow, "departuretime") || getSafeValue(nextDepartureRow, "time")) : targetSchedules.length ? "SUSPENDED" : "--:--";
     const nextStatus = !isRouteActive ? routeStatus.toUpperCase() : isTextMode ? "OPERATING" : nextDepartureRow ? String(getSafeValue(nextDepartureRow, "route_status") || getSafeValue(nextDepartureRow, "status") || "-").toUpperCase() : targetSchedules.length ? "NO RUNS" : "-";
@@ -956,7 +1036,7 @@ function Footer({ data, lastSyncedAt }) {
     const rawFooterText = data.company.footerText || "mySked DB";
     const platformName = getPlatformName(data.globalSettings);
     const platformVersion = getPlatformVersion(data.globalSettings);
-    return <footer className="footer-bar-container"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", fontSize: 12, color: "var(--muted)", fontWeight: 500 }}><div style={{ flex: 1, textAlign: "left" }}>Last Synced: <span style={{ color: "var(--text-strong)", fontWeight: 600 }}>{lastUpdatedStr}</span></div><div style={{ flex: 1, textAlign: "center", textTransform: "none", fontWeight: 500, color: "var(--text)" }}>{rawFooterText}</div><div style={{ flex: 1, textAlign: "right" }}><a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>{platformName} Powered by Broadimagi{platformVersion && <span className="platform-version"> {platformVersion}</span>}</a></div></div></footer>;
+    return <footer className="footer-bar-container"><div className="footer-bar-inner"><div className="footer-sync">Last Synced: <span>{lastUpdatedStr}</span></div><div className="footer-operator-text">{renderFooterRichText(rawFooterText)}</div><div className="footer-platform"><a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer">{platformName} Powered by Broadimagi{platformVersion && <span className="platform-version"> {platformVersion}</span>}</a></div></div></footer>;
 }
 
 function ScheduleStatusPopup({ alerts, company }) {

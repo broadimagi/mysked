@@ -370,20 +370,45 @@ function getScheduleColumns(rows) {
     return orderedColumns.length > 0 ? orderedColumns : preferredOrder;
 }
 
-function getScheduleGridTemplate(headersList, compact = false) {
-    return headersList.map(header => {
-        const clean = normalizeColumnKey(header);
-        if (compact) {
-            if (clean.includes("time")) return "minmax(96px, 0.9fr)";
-            if (clean.endsWith("status")) return "minmax(88px, 0.8fr)";
-            if (["remarks", "remark", "destination", "terminal", "notes", "note"].some(token => clean.includes(token))) return "minmax(120px, 1.2fr)";
-            return "minmax(96px, 1fr)";
-        }
-        if (clean.includes("time")) return "minmax(130px, 0.8fr)";
-        if (clean.endsWith("status")) return "minmax(110px, 0.7fr)";
-        if (["remarks", "remark", "destination", "terminal", "notes", "note"].some(token => clean.includes(token))) return "minmax(180px, 1.4fr)";
-        return "minmax(140px, 1fr)";
-    }).join(" ");
+function getScheduleGridTemplate(headersList) {
+    return `repeat(${Math.max(1, headersList.length)}, minmax(0, 1fr))`;
+}
+
+function getColumnDisplayValue(header, row) {
+    const clean = normalizeColumnKey(header);
+    const value = getSafeValue(row, header, "");
+    if (clean.includes("time")) return formatTimeToHHMM(value) || "";
+    return String(value ?? "").trim();
+}
+
+function getScheduleContentMetrics(headersList = [], rows = []) {
+    const lengths = headersList.flatMap(header => {
+        const labelLength = formatColumnLabel(header).length;
+        const valueLengths = rows.map(row => getColumnDisplayValue(header, row).length);
+        return [labelLength, ...valueLengths];
+    });
+    return {
+        longest: Math.max(1, ...lengths),
+        columnCount: Math.max(1, headersList.length)
+    };
+}
+
+function getScheduleLayoutStyle(headersList = [], rows = [], mainDashboard = false) {
+    const metrics = getScheduleContentMetrics(headersList, rows);
+    const crowdedColumns = Math.max(0, metrics.columnCount - 4);
+    const crowdedContent = Math.max(0, metrics.longest - 12);
+    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+    const minFont = metrics.columnCount >= 7 || metrics.longest >= 22 ? 9 : metrics.columnCount >= 5 || metrics.longest >= 16 ? 10 : 12;
+    const maxFont = metrics.columnCount >= 7 || metrics.longest >= 22 ? 12 : metrics.columnCount >= 5 || metrics.longest >= 16 ? 14 : 18;
+    const viewportUnit = isMobile
+        ? Math.max(2.2, Math.min(3.8, 4.2 - crowdedColumns * 0.32 - crowdedContent * 0.06))
+        : Math.max(0.62, Math.min(1.05, 1.12 - crowdedColumns * 0.07 - crowdedContent * 0.012));
+    const fontSize = `clamp(${minFont}px, ${viewportUnit.toFixed(2)}vw, ${maxFont}px)`;
+    const rowMinHeight = isMobile ? (mainDashboard ? "clamp(46px, 8.5vw, 58px)" : "clamp(38px, 7vw, 50px)") : (metrics.columnCount <= 4 ? "42px" : "38px");
+    const paddingX = metrics.columnCount <= 4 ? "24px" : "16px";
+    const paddingY = metrics.columnCount <= 4 ? "8px" : "7px";
+    const gap = metrics.columnCount <= 4 ? "12px" : "8px";
+    return `--schedule-cell-font-size:${fontSize};--schedule-heading-font-size:${fontSize};--schedule-row-min-height:${rowMinHeight};--schedule-row-padding-y:${paddingY};--schedule-row-padding-x:${paddingX};--schedule-row-gap:${gap};`;
 }
 
 function escapeHTML(value) {
@@ -396,19 +421,75 @@ function escapeHTML(value) {
     }[char]));
 }
 
+function splitTrailingPunctuation(value = "") {
+    const match = String(value).match(/^(.+?)([.,;:!?)]*)$/);
+    return match ? { main: match[1], trailing: match[2] } : { main: value, trailing: "" };
+}
+
+function getFooterLinkData(token = "") {
+    const markdownMatch = String(token).match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
+    const label = markdownMatch ? markdownMatch[1] : token;
+    const rawTarget = markdownMatch ? markdownMatch[2] : token;
+    const { main, trailing } = splitTrailingPunctuation(rawTarget);
+    const cleanTarget = main.trim();
+    const lowerTarget = cleanTarget.toLowerCase();
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanTarget);
+    const phoneDigits = cleanTarget.replace(/[^\d]/g, "");
+    const isPhone = phoneDigits.length >= 7 && /^\+?[\d\s().-]+$/.test(cleanTarget);
+
+    if (lowerTarget.startsWith("http://") || lowerTarget.startsWith("https://")) {
+        return { label, href: cleanTarget, trailing, external: true };
+    }
+    if (lowerTarget.startsWith("www.")) {
+        return { label, href: `https://${cleanTarget}`, trailing, external: true };
+    }
+    if (lowerTarget.startsWith("mailto:") || lowerTarget.startsWith("tel:")) {
+        return { label, href: cleanTarget, trailing, external: false };
+    }
+    if (isEmail) {
+        return { label, href: `mailto:${cleanTarget}`, trailing, external: false };
+    }
+    if (isPhone) {
+        const telValue = `${cleanTarget.trim().startsWith("+") ? "+" : ""}${phoneDigits}`;
+        return { label, href: `tel:${telValue}`, trailing, external: false };
+    }
+    return null;
+}
+
+function renderFooterRichTextHTML(value = "") {
+    const text = String(value || "mySked DB");
+    const tokenPattern = /(\[[^\]]+\]\((?:https?:\/\/|mailto:|tel:|www\.)[^)\s]+\)|https?:\/\/[^\s<]+|www\.[^\s<]+|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\+?\d[\d\s().-]{6,}\d)/gi;
+    let html = "";
+    let lastIndex = 0;
+
+    text.replace(tokenPattern, (match, _token, index) => {
+        html += escapeHTML(text.slice(lastIndex, index));
+        const linkData = getFooterLinkData(match);
+        if (linkData) {
+            html += `<a class="footer-inline-link" href="${escapeHTML(linkData.href)}"${linkData.external ? ' target="_blank" rel="noopener noreferrer"' : ""}>${escapeHTML(linkData.label)}</a>${escapeHTML(linkData.trailing)}`;
+        } else {
+            html += escapeHTML(match);
+        }
+        lastIndex = index + match.length;
+        return match;
+    });
+
+    html += escapeHTML(text.slice(lastIndex));
+    return html;
+}
+
 function renderScheduleCell(header, value, compact = false) {
     const clean = normalizeColumnKey(header);
-    const fontSize = compact ? "14px" : "15px";
 
     if (clean.includes("time")) {
-        return `<span class="time-col" style="font-size:${fontSize}; font-weight:700;">${escapeHTML(formatTimeToHHMM(value))}</span>`;
+        return `<span class="time-col">${escapeHTML(formatTimeToHHMM(value))}</span>`;
     }
 
     if (clean.endsWith("status")) {
-        return `<span><strong class="${statusColorMapper(value)}" style="font-size:14px; font-weight:700;">${escapeHTML(String(value || "-").toUpperCase())}</strong></span>`;
+        return `<span><strong class="${statusColorMapper(value)}">${escapeHTML(String(value || "-").toUpperCase())}</strong></span>`;
     }
 
-    return `<span class="text-col" style="font-size:14px; font-weight:600;">${escapeHTML(value || "-")}</span>`;
+    return `<span class="text-col">${escapeHTML(value || "-")}</span>`;
 }
 
 function getDashboardRowsPerCard() {
@@ -484,6 +565,7 @@ function renderActiveDashboardRoute() {
 
         const headersList = getScheduleColumns(targetSchedules);
         let gridStyle = `grid-template-columns: ${getScheduleGridTemplate(headersList, true)};`;
+        const layoutStyle = getScheduleLayoutStyle(headersList, targetSchedules, true);
 
         if (targetSchedules.length === 0) {
             boardHTML += `<div class="fids-empty-msg">No departures scheduled for this sector.</div>`;
@@ -491,7 +573,7 @@ function renderActiveDashboardRoute() {
             const rowGroups = splitRowsForDashboard(targetSchedules);
             const cardCount = rowGroups.length;
 
-            boardHTML += `<div class="dashboard-cards-grid" style="--dashboard-card-count:${cardCount};">`;
+            boardHTML += `<div class="dashboard-cards-grid" style="--dashboard-card-count:${cardCount};${layoutStyle}">`;
 
             const renderColumnBlock = (rowsSubset) => {
                 const blankRows = Math.max(0, getDashboardRowsPerCard() - rowsSubset.length);
@@ -670,11 +752,13 @@ function renderInteractiveScheduleView(routeID) {
 
     const headersList = getScheduleColumns(targetSchedules);
     const colWidths = getScheduleGridTemplate(headersList);
-    let gridLayoutPattern = "display:grid; grid-template-columns: " + colWidths + "; gap:15px; align-items:center; width:100%;";
+    const layoutStyle = getScheduleLayoutStyle(headersList, targetSchedules, false);
+    let gridLayoutPattern = "display:grid; grid-template-columns: " + colWidths + "; gap:var(--schedule-row-gap, 15px); align-items:center; width:100%;";
+    if (workspaceBoard) workspaceBoard.setAttribute("style", layoutStyle);
 
     const timetableHeaderBlock = document.querySelector(".timeline-title");
     if (timetableHeaderBlock) {
-        timetableHeaderBlock.style = "display:grid; grid-template-columns: " + colWidths + "; gap:15px; padding:12px 24px; border-bottom:1px solid var(--border); background:var(--background); font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;";
+        timetableHeaderBlock.style = "display:grid; grid-template-columns: " + colWidths + "; gap:var(--schedule-row-gap, 15px); padding:12px var(--schedule-row-padding-x, 24px); border-bottom:1px solid var(--border); background:var(--background); font-size:var(--schedule-heading-font-size, 11px); font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.3px;";
         timetableHeaderBlock.innerHTML = headersList.map(h => "<span>" + escapeHTML(formatColumnLabel(h)) + "</span>").join("");
     }
 
@@ -722,11 +806,11 @@ function renderUnifiedVariableFooter() {
     const platformVersion = getPlatformVersion(appData.globalSettings);
 
     const footerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center; width:100%; font-size:12px; color:var(--muted); font-weight:500;">
-            <div style="flex: 1; text-align: left;">Last Synced: <span style="color:var(--text-strong); font-weight:600;">${lastUpdatedStr}</span></div>
-            <div style="flex: 1; text-align: center; text-transform: none; font-weight: 500; color:var(--text);">${rawFooterText}</div>
-            <div style="flex: 1; text-align: right;">
-                <a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer" style="color:var(--primary); text-decoration:none; font-weight:600;">
+        <div class="footer-bar-inner">
+            <div class="footer-sync">Last Synced: <span>${escapeHTML(lastUpdatedStr)}</span></div>
+            <div class="footer-operator-text">${renderFooterRichTextHTML(rawFooterText)}</div>
+            <div class="footer-platform">
+                <a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer">
                     ${escapeHTML(platformName)} Powered by Broadimagi${platformVersion ? ` <span class="platform-version">${escapeHTML(platformVersion)}</span>` : ""}
                 </a>
             </div>
