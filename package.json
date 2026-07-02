@@ -1,7 +1,7 @@
 {
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "vite build",
+    "build": "mkdir -p dist dist/ubeexpress dist/rrcg && cp index.html dashboard.html app.js style.css dist/ && cp public/* dist/ && cp index.html dist/404.html && cp index.html dist/ubeexpress/index.html && cp index.html dist/rrcg/index.html",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

@@ -1,4 +1,5 @@
 const API_URL = "https://script.google.com/macros/s/AKfycby778WwSXHTuZcVC2iT4U3wkrn5pYOpXOuCVZQQ3Oo47cuLqbhyFpEm_6RRrgdcF9s/exec";
+const SITE_URL = "https://mysked.broadimagi.com";
 
 let appData = { globalSettings: {}, company: {}, routes: [], schedules: [], advisories: [] };
 let selectedRoute = null;
@@ -65,6 +66,40 @@ function getMaintenanceRefreshSeconds(globalSettings = {}) {
     ) || 30;
 }
 
+function getOperatorCodeFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    const queryOperator = String(params.get("operator") || "").trim();
+    if (queryOperator) return queryOperator;
+
+    const pathParts = window.location.pathname
+        .split("/")
+        .map(part => decodeURIComponent(part).trim())
+        .filter(Boolean);
+    const firstPart = pathParts[0] || "";
+    const reservedPaths = ["index.html", "dashboard.html", "404.html", "dist"];
+    return reservedPaths.includes(firstPart.toLowerCase()) ? "" : firstPart;
+}
+
+function setPageMetadata({ title, description, canonical }) {
+    if (title) {
+        document.title = title;
+        const ogTitle = document.querySelector('meta[property="og:title"]');
+        if (ogTitle) ogTitle.setAttribute("content", title);
+    }
+    if (description) {
+        const metaDescription = document.querySelector('meta[name="description"]');
+        const ogDescription = document.querySelector('meta[property="og:description"]');
+        if (metaDescription) metaDescription.setAttribute("content", description);
+        if (ogDescription) ogDescription.setAttribute("content", description);
+    }
+    if (canonical) {
+        const canonicalLink = document.querySelector('link[rel="canonical"]');
+        const ogURL = document.querySelector('meta[property="og:url"]');
+        if (canonicalLink) canonicalLink.setAttribute("href", canonical);
+        if (ogURL) ogURL.setAttribute("content", canonical);
+    }
+}
+
 function getReadableTextColor(color) {
     const raw = String(color || "").trim();
     const hex = raw.match(/^#?([a-f\d]{3}|[a-f\d]{6})$/i);
@@ -90,12 +125,10 @@ function applyOperatorTheme(primaryColor) {
 }
 
 window.onload = () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    let operatorCode = urlParams.get('operator'); 
+    let operatorCode = getOperatorCodeFromURL();
 
     if (!operatorCode) {
-        showStartupError("No operator was selected. Returning to the homepage in 3 seconds.");
-        setTimeout(() => { window.location.href = "index.html"; }, 3000);
+        initHomePage();
         return;
     }
 
@@ -107,6 +140,102 @@ window.onload = () => {
     updateClock();
     setInterval(updateClock, 1000);
 };
+
+function normalizeOperator(op) {
+    return {
+        code: op.code || op.operatorCode || op.operator || op.companyCode || "",
+        name: op.name || op.companyName || op.company || "Unnamed Service",
+        desc: op.tagline || op.description || op.footerText || "Passenger Information System"
+    };
+}
+
+async function initHomePage() {
+    document.body.className = "react-home-mode";
+    document.documentElement.setAttribute("data-theme", "dark");
+    setPageMetadata({
+        title: "mySked Live Transport Schedules",
+        description: "Select a mySked operator to view live route schedules, advisories, and passenger information dashboards.",
+        canonical: `${SITE_URL}/`
+    });
+    try {
+        const response = await fetch(`${API_URL}?mode=operators&t=${Date.now()}`);
+        const data = await response.json();
+        appData = { ...appData, globalSettings: data.globalSettings || {} };
+        if (data.maintenance) {
+            renderStaticHome([], {
+                maintenance: data.message || getSettingValue(data.globalSettings, "MaintenanceMessage", "System maintenance is in progress.")
+            });
+            return;
+        }
+        const operators = data.success && Array.isArray(data.operators)
+            ? data.operators.map(normalizeOperator).filter(op => op.code && op.name)
+            : [];
+        renderStaticHome(operators);
+    } catch (error) {
+        renderStaticHome([], { error: "Unable to load services. Please try again later." });
+    }
+}
+
+function renderStaticHome(operators = [], options = {}) {
+    const platformName = getPlatformName(appData.globalSettings);
+    const supportEmail = getSupportEmail(appData.globalSettings);
+    const platformVersion = getPlatformVersion(appData.globalSettings);
+    const now = new Date();
+    const time = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+    const date = now.toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const serviceCount = operators.length === 0 ? "0 services" : `${operators.length} ${operators.length === 1 ? "service" : "services"} ready`;
+
+    document.body.innerHTML = `
+        <div class="react-home">
+            <header class="header">
+                <div class="brand-lockup">
+                    <div class="brand-mark">MS</div>
+                    <div>
+                        <div class="header-title">${escapeHTML(platformName)}</div>
+                        <div class="header-kicker">Live transport schedules</div>
+                    </div>
+                </div>
+                <div class="header-clock">
+                    <div class="clock-time">${escapeHTML(time)}</div>
+                    <div class="clock-date">${escapeHTML(date)}</div>
+                </div>
+            </header>
+            <main class="container">
+                <section class="overview-panel">
+                    <div>
+                        <div class="eyebrow">Passenger Information System</div>
+                        <h1 class="content-title">Select your operator.</h1>
+                        <p class="content-subtitle">Open a live route dashboard with current departures, advisories, and service information.</p>
+                    </div>
+                    <div class="status-stack">
+                        <div class="status-card"><span class="status-dot"></span><div><div class="status-label">System status</div><div class="status-value">${options.maintenance ? "Maintenance" : "Online"}</div></div></div>
+                        <div class="status-card"><span class="status-dot"></span><div><div class="status-label">Data feed</div><div class="status-value">${options.error ? "Check connection" : "Auto synced"}</div></div></div>
+                    </div>
+                </section>
+                <section class="service-panel">
+                    <div class="service-panel-head">
+                        <div class="service-title">Available Services</div>
+                        <div class="service-count">${escapeHTML(serviceCount)}</div>
+                    </div>
+                    <div class="grid">
+                        ${options.maintenance ? `<div class="empty-state"><div class="empty-title">Maintenance in progress</div><div class="empty-text">${escapeHTML(options.maintenance)}</div>${supportEmail ? `<a class="support-link" href="mailto:${escapeHTML(supportEmail)}">${escapeHTML(supportEmail)}</a>` : ""}</div>` : ""}
+                        ${options.error ? `<div class="empty-state"><div class="empty-title">Services unavailable</div><div class="empty-text">${escapeHTML(options.error)}</div>${supportEmail ? `<a class="support-link" href="mailto:${escapeHTML(supportEmail)}">${escapeHTML(supportEmail)}</a>` : ""}</div>` : ""}
+                        ${!options.maintenance && !options.error && operators.length === 0 ? `<div class="empty-state"><div class="empty-title">No services listed</div><div class="empty-text">Please check the operator settings sheet.</div></div>` : ""}
+                        ${!options.maintenance && !options.error ? operators.map(op => `
+                            <a href="/${encodeURIComponent(op.code)}" class="operator-card">
+                                <div class="meta">
+                                    <div class="name">${escapeHTML(op.name)}</div>
+                                    <div class="desc">${escapeHTML(op.desc)}</div>
+                                </div>
+                            </a>
+                        `).join("") : ""}
+                    </div>
+                </section>
+            </main>
+            <footer><a href="https://broadimagi.com" target="_blank" rel="noopener noreferrer" class="footer-link">${escapeHTML(platformName)} Powered by Broadimagi${platformVersion ? ` <span class="platform-version">${escapeHTML(platformVersion)}</span>` : ""}</a></footer>
+        </div>
+    `;
+}
 
 async function initApplication(operatorCode) {
     await loadDashboardData(operatorCode, true, "all");
@@ -146,9 +275,9 @@ async function loadDashboardData(operatorCode, isFirstLoad, refreshScope = "all"
         if (!data.success) {
             appData = { ...appData, globalSettings: data.globalSettings || appData.globalSettings || {} };
             isMaintenanceMode = false;
-            if (data.code === "NO_OPERATOR") {
-                showStartupError("No operator was selected. Returning to the homepage in 3 seconds.");
-                setTimeout(() => { window.location.href = "index.html"; }, 3000);
+            if (data.code === "NO_OPERATOR" || data.code === "OPERATOR_NOT_FOUND") {
+                showStartupError("Operator not found. Returning to the homepage in 8 seconds.");
+                setTimeout(() => { window.location.href = "/"; }, 8000);
             } else if (isFirstLoad) {
                 showStartupError(data.error || "Unable to load schedule data.");
             }
@@ -157,6 +286,14 @@ async function loadDashboardData(operatorCode, isFirstLoad, refreshScope = "all"
         appData = data;
         isMaintenanceMode = false;
         lastSyncedAt = new Date();
+        if (isFirstLoad) {
+            const companyName = appData.company.companyName || "mySked";
+            setPageMetadata({
+                title: `${companyName} Live Schedule | mySked`,
+                description: `Live route schedules, advisories, and passenger information for ${companyName}.`,
+                canonical: `${SITE_URL}/${encodeURIComponent(operatorCode)}`
+            });
+        }
 
         const shouldRefreshHeader = isFirstLoad || refreshScope === "all" || refreshScope === "header";
         const shouldRefreshCards = isFirstLoad || refreshScope === "all" || refreshScope === "cards";
@@ -191,11 +328,11 @@ function showStartupError(message) {
     const platformName = getPlatformName(appData.globalSettings);
     const supportEmail = getSupportEmail(appData.globalSettings);
     loadingScreen.innerHTML = `
-        <h1>${escapeHTML(platformName)}</h1>
-        <p style="max-width:420px; text-align:center; line-height:1.6; text-transform:none; letter-spacing:0; color:#9ca3af;">
-            ${escapeHTML(message)}
-        </p>
-        ${supportEmail ? `<a href="mailto:${escapeHTML(supportEmail)}" style="color:#7dd3fc; font-size:13px; font-weight:800; text-decoration:none;">${escapeHTML(supportEmail)}</a>` : ""}
+        <div class="startup-message-panel">
+            <h1>${escapeHTML(platformName)}</h1>
+            <p>${escapeHTML(message)}</p>
+            ${supportEmail ? `<a href="mailto:${escapeHTML(supportEmail)}">${escapeHTML(supportEmail)}</a>` : ""}
+        </div>
     `;
 }
 
